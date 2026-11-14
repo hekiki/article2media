@@ -18,6 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { spawnSync } from 'node:child_process';
 import { validate } from './lib/validate.mjs';
 import { buildPage } from './lib/layout-long.mjs';
 import { buildCards, buildCaption, ratioSpec, coverVariants, FORMS } from './lib/layout-card.mjs';
@@ -26,6 +27,7 @@ import { findSource, sourceChecks } from './lib/source-check.mjs';
 import { resolveIllustrations, resolveImageFigures } from './lib/illustrations.mjs';
 import { qaInPage } from './lib/qa.mjs';
 import { launchBrowser } from './lib/chrome.mjs';
+import { X_STRIP, measureCuts, planStrips, groupPosts, stripName } from './lib/x-strips.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const THEMES_DIR = path.join(ROOT, 'themes');
@@ -45,6 +47,7 @@ const { values: opt, positionals } = parseArgs({
     page: { type: 'string' },
     'max-height': { type: 'string' },
     wide: { type: 'boolean', default: false },
+    x: { type: 'boolean', default: false },
     form: { type: 'string' },
     covers: { type: 'boolean', default: false },
     issue: { type: 'string' },
@@ -87,7 +90,7 @@ if (opt.list) {
 }
 const CLI = process.env.A2M_CLI || 'render.mjs';
 if (opt.help || !positionals[0]) {
-  console.error(`用法：node ${CLI} <content.json | article.md> [--ratio 3:4|4:5|1:1|9:16] [--wide] [--form quotes|onepage|qa] [--covers] [--theme 名称|a,b|all] [--out 目录] [--check] [--list]`);
+  console.error(`用法：node ${CLI} <content.json | article.md> [--ratio 3:4|4:5|1:1|9:16] [--wide] [--form quotes|onepage|qa|digest] [--covers] [--theme 名称|a,b|all] [--out 目录] [--check] [--list]`);
   process.exit(opt.help ? 0 : 2);
 }
 
@@ -166,7 +169,7 @@ if (errors.length) {
   process.exit(1);
 }
 const nSec = content.pages.reduce((a, p) => a + p.sections.length, 0);
-const layoutDesc = layout === 'card' ? (opt.covers ? '，只出封面的各个版本' : opt.form ? `，形态：${opt.form}` : `，将生成 ${info.cards === info.cardsMax ? info.cards : `${info.cards}–${info.cardsMax}`} 张 ${spec.name} 卡片${info.cards === info.cardsMax ? '' : '（清单分页出图时才定）'}`) : `，版式：${opt.wide || ['magazine', 'wide'].includes(opt.layout) ? '宽版杂志长图（1200）' : '手机长图（1080 宽）'}`;
+const layoutDesc = layout === 'card' ? (opt.covers ? '，只出封面的各个版本' : opt.form ? `，形态：${opt.form}` : `，将生成 ${info.cards === info.cardsMax ? info.cards : `${info.cards}–${info.cardsMax}`} 张 ${spec.name} 卡片${info.cards === info.cardsMax ? '' : '（清单分页出图时才定）'}`) : `，版式：${opt.wide || ['magazine', 'wide'].includes(opt.layout) ? '宽版杂志长图（1200）' : opt.x ? 'X 版长图（手机版切成 1080 宽、高不超过 4096 的竖条）' : '手机长图（1080 宽）'}`;
 console.log(`✓ content.json 校验通过：${content.pages.length} 页，${nSec} 节${layoutDesc}`);
 if (opt.check) {
   if (warnings.length) console.log(`还有 ${warnings.length} 条提示：逐条处理到 0，再出图。`);
@@ -180,7 +183,7 @@ if (opt.check) {
 }
 
 // Lighter forms and cover variants are cut from the same content.json as the full card set.
-const form = opt.form ? { quotes: 'quotes', quote: 'quotes', '金句': 'quotes', onepage: 'onepage', 'one-page': 'onepage', '一页': 'onepage', qa: 'qa', '问答': 'qa' }[opt.form] : '';
+const form = opt.form ? { quotes: 'quotes', quote: 'quotes', '金句': 'quotes', onepage: 'onepage', 'one-page': 'onepage', '一页': 'onepage', qa: 'qa', '问答': 'qa', digest: 'digest', '速览': 'digest', '图文速览': 'digest' }[opt.form] : '';
 if (opt.form && !form) { console.error(`[render] 未知形态 "${opt.form}"，可用：${FORMS.join('、')}`); process.exit(2); }
 if ((form || opt.covers) && layout !== 'card') { console.error('[render] --form / --covers 只用于卡片（加 --ratio，或用 image-cards 的 cards.mjs）'); process.exit(2); }
 if (form === 'qa' && !(Array.isArray(content.qa) && content.qa.length)) { console.error('[render] 问答形态需要 content.json 里的 "qa": [{"q": "问题", "a": "回答"}, …]'); process.exit(1); }
@@ -206,45 +209,130 @@ const ext = format === 'jpeg' ? 'jpg' : 'png';
 const quality = Number(opt.quality);
 // Long pages: phone width (one column) unless --wide / --layout magazine asks for the 1200 px two-column page.
 const wide = opt.wide || ['magazine', 'wide'].includes(opt.layout);
+// X 版长图 (--x): the phone page cut into strips X keeps at full width (why and how: lib/x-strips.mjs).
+const xPage = layout === 'long' && !!opt.x && !wide;
+if (opt.x && !xPage) { console.error('[render] --x 只用于手机版总结长图（不和 --wide、--ratio 一起用）'); process.exit(2); }
+const X_MB = 5;
 const longW = wide ? 1200 : 540;
-const maxHeight = Number(opt['max-height']) || (layout === 'long' && !wide ? 7600 : 4400);
+const maxHeight = Number(opt['max-height']) || (xPage ? 1e6 : layout === 'long' && !wide ? 7600 : 4400);
 const pageFilter = opt.page ? new Set(opt.page.split(',').map((n) => Number(n.trim()))) : null;
 const baseOut = path.resolve(opt.out || path.dirname(contentPath));
 const outDirFor = (theme) => {
-  const sub = layout === 'card' ? `${theme}-${spec.slug}${opt.covers ? '-covers' : form ? `-${form}` : ''}` : theme;
+  const sub = layout === 'card' ? `${theme}-${spec.slug}${opt.covers ? '-covers' : form ? `-${form}` : ''}` : xPage ? `${theme}-x` : theme;
   return themes.length > 1 || !opt.out ? path.join(baseOut, sub) : baseOut;
 };
 
 async function renderLong(browser, theme, themeCss, nAcc, outDir, report) {
   const layoutCss = COMPONENTS_CSS + '\n' + readCss('long.css') + (wide ? '' : '\n' + readCss('long-mobile.css'));
+  const first = report.length;
+  const xCounts = []; // X: strips per rendered page
   for (let pi = 0; pi < content.pages.length; pi++) {
     if (pageFilter && !pageFilter.has(pi + 1)) continue;
     const name = `page-${String(pi + 1).padStart(2, '0')}`;
     const htmlPath = path.join(outDir, `${name}.html`);
     fs.writeFileSync(htmlPath, buildPage(pi, { content, brand, themeCss, layoutCss, nAcc, wide }));
     const entry = { theme, label: `第 ${pi + 1} 页`, html: htmlPath };
+    let entries = [entry];
     if (browser) {
       const page = await browser.newPage();
       try {
-        await page.setViewport(longW, 1600, scale);
+        await page.setViewport(longW, 1600, xPage ? X_STRIP.scale : scale);
         await page.goto(pathToFileURL(htmlPath).href);
         const fontStatus = await page.settle(25000);
         const qa = await page.evaluate(qaInPage, { maxHeight });
-        // Chrome cannot capture more than ~16000 device px in one image: a taller page is captured at a lower scale.
-        const shot = Math.min(scale, Math.floor((16000 / qa.height) * 100) / 100);
-        if (shot < scale) qa.issues.push({ level: 'warn', where: '整页', msg: `页面太高，按 ${shot} 倍输出（宽 ${Math.round(qa.width * shot)}px）：拆成两页可恢复 ${scale} 倍清晰度` });
-        await page.setViewport(qa.width, qa.height, shot);
-        const buf = await page.screenshot({ clip: { x: 0, y: 0, width: qa.width, height: qa.height }, format, quality });
-        const imgPath = path.join(outDir, `${name}.${ext}`);
-        fs.writeFileSync(imgPath, buf);
         if (fontStatus === 'timeout') qa.issues.push({ level: 'warn', where: '字体', msg: '等待网络字体超时，部分文字可能使用了回退字体' });
-        Object.assign(entry, { image: imgPath, size: `${Math.round(qa.width * shot)}×${Math.round(qa.height * shot)}`, kb: Math.round(buf.length / 1024), issues: qa.issues });
+        if (xPage) {
+          entries = await renderStrips(page, qa, pi, entry, outDir);
+          xCounts.push({ page: pi + 1, n: entries.length });
+        } else {
+          // Chrome cannot capture more than ~16000 device px in one image: a taller page is captured at a lower scale.
+          const shot = Math.min(scale, Math.floor((16000 / qa.height) * 100) / 100);
+          if (shot < scale) qa.issues.push({ level: 'warn', where: '整页', msg: `页面太高，按 ${shot} 倍输出（宽 ${Math.round(qa.width * shot)}px）：拆成两页可恢复 ${scale} 倍清晰度` });
+          await page.setViewport(qa.width, qa.height, shot);
+          const buf = await page.screenshot({ clip: { x: 0, y: 0, width: qa.width, height: qa.height }, format, quality });
+          const imgPath = path.join(outDir, `${name}.${ext}`);
+          fs.writeFileSync(imgPath, buf);
+          Object.assign(entry, { image: imgPath, size: `${Math.round(qa.width * shot)}×${Math.round(qa.height * shot)}`, kb: Math.round(buf.length / 1024), issues: qa.issues });
+        }
       } finally {
         await page.close();
       }
     }
-    report.push(entry);
+    report.push(...entries);
   }
+  if (xPage && xCounts.length && report.length > first) {
+    report[report.length - 1].posts = groupPosts(xCounts).map((p, i) => `第 ${i + 1} 帖 ${p.length} 张：${p.map((s) => stripName(s.page, s.k).replace(/\.png$/, '')).join('、')}`);
+  }
+}
+
+// X: capture the page strip by strip and save PNG-8 — X keeps PNG-8 as uploaded, other PNGs over 900 px become
+// q85 JPEGs; over 5 MB → JPEG. A cut through a narrow gap gets a little more room above / below it. That band is
+// captured from the page itself with everything hidden except the containers the cut runs through, so a textured
+// or gradient background (paper grain, grid, a card's fill) simply continues.
+const hasFfmpeg = (() => { try { return spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0; } catch { return false; } })();
+const BAND_CSS = '.page *{visibility:hidden!important}.page [data-xa],.page [data-deco],.page [data-deco] *{visibility:visible!important}';
+async function backgroundBand(page, pid, y, width, height) {
+  await page.evaluate(({ pid, css }) => {
+    const root = document.querySelector('.page') || document.body;
+    for (let e = (pid && document.querySelector(`[data-xcut="${pid}"]`)) || root; e && e !== document.body; e = e.parentElement) e.setAttribute('data-xa', '');
+    const st = document.createElement('style');
+    st.id = 'x-band';
+    st.textContent = css;
+    document.head.appendChild(st);
+  }, { pid, css: BAND_CSS });
+  try {
+    return await page.screenshot({ clip: { x: 0, y, width, height }, format: 'png' });
+  } finally {
+    await page.evaluate(() => { document.getElementById('x-band')?.remove(); for (const e of document.querySelectorAll('[data-xa]')) e.removeAttribute('data-xa'); });
+  }
+}
+async function renderStrips(page, qa, pi, entry, outDir) {
+  const S = X_STRIP.scale, MB = X_MB * 1024 * 1024;
+  const { cands } = await page.evaluate(measureCuts);
+  const strips = planStrips(qa.height, cands);
+  const out = [];
+  for (let k = 0; k < strips.length; k++) {
+    const s = strips[k];
+    const e = { theme: entry.theme, label: `${entry.label} · ${k + 1}/${strips.length}`, html: entry.html, issues: k ? [] : [...qa.issues] };
+    const clip = { x: 0, y: s.y0, width: qa.width, height: s.y1 - s.y0 };
+    const top = Math.round(s.padTop * S), bot = Math.round(s.padBot * S);
+    let imgPath = path.join(outDir, stripName(pi + 1, k + 1, ext));
+    let buf = await page.screenshot({ clip, format: hasFfmpeg ? 'png' : format, quality: hasFfmpeg ? undefined : quality });
+    if (hasFfmpeg) {
+      const base = path.join(outDir, `.${path.basename(imgPath)}`);
+      const parts = [];
+      if (top) { fs.writeFileSync(`${base}.top.png`, await backgroundBand(page, s.pidTop, s.y0 - s.padTop, qa.width, s.padTop)); parts.push(`${base}.top.png`); }
+      fs.writeFileSync(`${base}.mid.png`, buf);
+      parts.push(`${base}.mid.png`);
+      if (bot) { fs.writeFileSync(`${base}.bot.png`, await backgroundBand(page, s.pidBot, s.y1, qa.width, s.padBot)); parts.push(`${base}.bot.png`); }
+      const graph = (parts.length > 1 ? `${parts.map((_, i) => `[${i}]`).join('')}vstack=${parts.length}` : '[0]null')
+        + (format === 'png' ? ',split[a][b];[a]palettegen=max_colors=256:stats_mode=full[p];[b][p]paletteuse=dither=none' : '');
+      const r = spawnSync('ffmpeg', ['-v', 'error', '-y', ...parts.flatMap((f) => ['-i', f]), '-filter_complex', graph, ...(format === 'jpeg' ? ['-q:v', '2'] : []), imgPath]);
+      if (r.status === 0) buf = fs.readFileSync(imgPath);
+      else e.issues.push({ level: 'warn', where: '格式', msg: `ffmpeg 处理失败，保留原截图：${String(r.stderr || '').trim().split('\n').pop()}` });
+      for (const f of parts) fs.rmSync(f, { force: true });
+    } else if (k === 0 && format === 'png') {
+      e.issues.push({ level: 'warn', where: '格式', msg: '没有 ffmpeg：没转成 PNG-8（X 可能把它转成 JPEG，字边略糊），切口处也没补边距' });
+    }
+    if (buf.length > MB) {
+      for (const q of [92, 86, 80]) {
+        buf = await page.screenshot({ clip, format: 'jpeg', quality: q });
+        if (buf.length <= MB) break;
+      }
+      if (imgPath.endsWith('.png')) { fs.rmSync(imgPath, { force: true }); imgPath = imgPath.replace(/\.png$/, '.jpg'); }
+      e.issues.push({ level: buf.length > MB ? 'error' : 'warn', where: '大小', msg: `超过 X 的 ${X_MB} MB 上限，改存 JPEG（${Math.round(buf.length / 1024)} KB）` });
+    }
+    fs.writeFileSync(imgPath, buf);
+    const isPng = buf.readUInt32BE(0) === 0x89504e47;
+    const w = isPng ? buf.readUInt32BE(16) : Math.round(qa.width * S);
+    const h = isPng ? buf.readUInt32BE(20) : Math.round(clip.height * S);
+    if (h > X_STRIP.maxPx) e.issues.push({ level: 'error', where: '尺寸', msg: `高 ${h}px，超过 X 的 ${X_STRIP.maxPx}px：X 会把它压窄，字就糊了` });
+    if (k < strips.length - 1 && s.level === 0) e.issues.push({ level: 'warn', where: '切口', msg: `底部从「${s.box}」中间切开（这一块比一张图还高，中间没有空隙）：把它拆短一些` });
+    if (k < strips.length - 1 && s.level === -1) e.issues.push({ level: 'warn', where: '切口', msg: '底部是强行切开的，可能切到了文字：这一块太长，拆短一些' });
+    Object.assign(e, { image: imgPath, size: `${w}×${h}`, kb: Math.round(buf.length / 1024) });
+    out.push(e);
+  }
+  return out;
 }
 
 async function renderCards(browser, theme, themeCss, nAcc, outDir, report) {
@@ -256,9 +344,9 @@ async function renderCards(browser, theme, themeCss, nAcc, outDir, report) {
     return r.count;
   };
   let styles = null; // cover variants: the layout of each one, for file names
-  const stem = opt.covers ? 'cover' : form === 'quotes' ? 'quote' : form === 'onepage' ? 'onepage' : form === 'qa' ? 'qa' : 'card';
+  const stem = opt.covers ? 'cover' : form === 'quotes' ? 'quote' : form === 'onepage' ? 'onepage' : form === 'qa' ? 'qa' : form === 'digest' ? 'digest' : 'card';
   const fileOf = (idx) => `${stem}-${String(idx).padStart(2, '0')}${styles ? `-${styles[idx - 1]}` : ''}.${ext}`;
-  const what = opt.covers ? '个封面版本' : form === 'quotes' ? `张 ${ratio} 金句图` : form === 'onepage' ? `张 ${ratio} 一页看完` : form === 'qa' ? `张 ${ratio} 问答卡` : `张 ${ratio} 卡片`;
+  const what = opt.covers ? '个封面版本' : form === 'quotes' ? `张 ${ratio} 金句图` : form === 'onepage' ? `张 ${ratio} 一页看完` : form === 'qa' ? `张 ${ratio} 问答卡` : form === 'digest' ? `张 ${ratio} 图文速览` : `张 ${ratio} 卡片`;
   let count = build(0);
   const captionPath = path.join(outDir, 'caption.md');
   const entry = { theme, label: `${count} ${what}`, html: htmlPath, ...(form || opt.covers ? {} : { caption: captionPath }) };
@@ -348,6 +436,7 @@ for (const r of report) {
   if (r.covers) console.log(`  封面：${r.covers}`);
   if (r.notes) console.log(`  发布信息：${r.notes}`);
   if (r.caption) console.log(`  文案：${r.caption}`);
+  if (r.posts) console.log(`  发帖分组（X 每帖最多 ${X_STRIP.perPost} 张，第 2 帖起回复自己接成线程）：\n${r.posts.map((p) => '    ' + p).join('\n')}`);
   for (const i of r.issues || []) {
     if (i.level === 'error') nErr++; else nWarn++;
     console.log(`  ${i.level === 'error' ? '✗' : '⚠'} ${i.where}：${i.msg}`);

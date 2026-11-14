@@ -21,6 +21,49 @@ let failed = 0;
 const check = (name, ok, detail = '') => { console.log(`${ok ? '✓' : '✗'} ${name}${ok ? '' : `\n    ${String(detail).slice(0, 600)}`}`); if (!ok) failed++; };
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+// ---------- verbatim parser coverage ----------
+{
+  const { loadArticle } = await import(pathToFileURL(path.join(LIB, 'layout-full.mjs')).href);
+  const file = path.join(TMP, 'pipes.md');
+  fs.writeFileSync(file, '---\ntitle: "【A | B】标题"\n---\n\n# 【A | B】标题\n\n正文里也有 a | b 两边。\n\n| 列一 | 列二 |\n|---|---|\n| x | y |\n');
+  const { issues, blocks } = loadArticle(file);
+  check('原文里不在表格中的 | 是文字：解析校验不报错，表格照常拆成单元格',
+    !issues.length && blocks.filter((b) => b.kind === 'td').length === 2, JSON.stringify(issues));
+}
+
+// ---------- rewrite vs article: English words ----------
+{
+  const { stray } = await import(pathToFileURL(path.join(LIB, 'source-check.mjs')).href);
+  const links = Array.from({ length: 12 }, (_, i) => `https://example.com/docs/some-long-path-${i}/index.html`).join('\n');
+  const article = `# 教程\n\n子 Agent 跑完任务之后，默认进入 idle 常驻待命状态，而不是直接销毁；改文件之前，建议先开一个独立的 worktree 让它在里面慢慢折腾，主工作区保持干净。\n\n${links}\n\n\`\`\`\ncurl -fsSL https://example.com/install.sh | bash\n\`\`\`\n`;
+  const content = { pages: [{ part: '用法', sections: [{ heading: '待命', paragraphs: ['跑完进入 idle 状态，主工作区不受影响，可以开 worktree。'] }] }] };
+  check('中文原文里链接和代码再多：作者自己用的英文词（idle、worktree）不算夹杂', eq(stray(content, article), []), JSON.stringify(stray(content, article)));
+}
+
+// ---------- X strips: where to cut, how to group ----------
+{
+  const { planStrips, groupPosts, X_STRIP, stripName, parseStripName } = await import(pathToFileURL(path.join(LIB, 'x-strips.mjs')).href);
+  // A 6200 px (CSS) page: a cut every 100 px inside sections, section boundaries at 1500 / 3100 / 4600.
+  const secs = [1500, 3100, 4600];
+  const cands = [...Array.from({ length: 61 }, (_, i) => ({ y: 50 + i * 100, gap: 12, level: 1 })), ...secs.map((y) => ({ y, gap: 40, level: 3 }))];
+  let s = planStrips(6200, cands);
+  check('竖条：6200 高的页切 4 张，切口都落在节与节之间，每张 ≤ 4096、末张到页底', s.length === 4 && eq(s.slice(0, 3).map((x) => x.y1), secs) && s.at(-1).y1 === 6200 && s.every((x) => x.px <= X_STRIP.maxPx), JSON.stringify(s));
+  s = planStrips(1700, cands.filter((c) => c.y < 1700));
+  check('竖条：不到宽的 3.3 倍的页不切', s.length === 1 && s[0].y0 === 0 && s[0].y1 === 1700, JSON.stringify(s));
+  s = planStrips(3000, [{ y: 1500, gap: 4, level: 1 }]);
+  check('竖条：缝太窄时补边距（18 − 缝的一半），算进高度', s.length === 2 && s[0].padBot === 16 && s[1].padTop === 16 && s[0].px === (1500 + 16) * 2, JSON.stringify(s));
+  s = planStrips(5000, []);
+  check('竖条：一大块中间没有缝时强行切开（标 level -1），仍不超过 4096', s.length >= 3 && s.every((x) => x.px <= X_STRIP.maxPx) && s.slice(0, -1).every((x) => x.level === -1), JSON.stringify(s));
+  s = planStrips(4000, [{ y: 2000, gap: 0, level: 0, box: 'panel' }, { y: 1300, gap: 20, level: 1 }, { y: 2700, gap: 20, level: 1 }]);
+  check('竖条：能不切开卡片就不切（宁可多一张）', s.every((x) => x.level !== 0), JSON.stringify(s));
+  const sizes = (posts) => posts.map((p) => p.length);
+  check('分帖：X 一帖 20 张，14 张一帖发完', X_STRIP.perPost === 20 && eq(sizes(groupPosts([{ page: 1, n: 4 }, { page: 2, n: 4 }, { page: 3, n: 3 }, { page: 4, n: 3 }])), [14]));
+  check('分帖（每帖 4 张时）：4/3/3/3 → 每页一帖', eq(sizes(groupPosts([{ page: 1, n: 4 }, { page: 2, n: 3 }, { page: 3, n: 3 }, { page: 4, n: 3 }], 4)), [4, 3, 3, 3]));
+  check('分帖：小页并进一帖，帖数最少且更均匀（4 / 3 / 1+1，不是 4 / 3+1 / 1）', eq(groupPosts([{ page: 1, n: 4 }, { page: 2, n: 3 }, { page: 3, n: 1 }, { page: 4, n: 1 }], 4).map((p) => p.map((x) => `${x.page}-${x.k}`)), [['1-1', '1-2', '1-3', '1-4'], ['2-1', '2-2', '2-3'], ['3-1', '4-1']]));
+  check('分帖：一页 6 张拆成 3 + 3；1+1+1 并成一帖', eq(sizes(groupPosts([{ page: 1, n: 6 }], 4)), [3, 3]) && eq(sizes(groupPosts([{ page: 1, n: 1 }, { page: 2, n: 1 }, { page: 3, n: 1 }], 4)), [3]));
+  check('文件名：x-01-2.png ↔ 第 1 页第 2 张', stripName(1, 2) === 'x-01-2.png' && eq(parseStripName('x-01-2.png'), { page: 1, k: 2 }) && parseStripName('page-01.png') === null);
+}
+
 // ---------- fonts ----------
 {
   const F = await import(pathToFileURL(path.join(LIB, 'fonts.mjs')).href);

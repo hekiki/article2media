@@ -154,7 +154,8 @@ const KEEP_EN = new Set('agent agents ai api app apps token tokens prompt prompt
 export function stray(c, text) {
   const all = [...texts(c)].map(([w, s]) => (/^(source|footnote)/.test(w) ? '' : plain(s))).join(' ');
   if (cjkShare(all) < 0.5) return [];
-  const zhSource = cjkShare(text) >= 0.5;
+  // Links, image addresses and code blocks are Latin whatever the article's language: measure the prose only.
+  const zhSource = cjkShare(text.replace(/```[\s\S]*?```|!\[[^\]]*\]\([^)]*\)|https?:\/\/\S+/g, ' ')) >= 0.5;
   // Names, handles and inline code from the article are fine; in a Chinese article every English word is the author's own term.
   const names = new Set([...text.matchAll(/\b[A-Z][A-Za-z0-9+.-]+\b|@[\w.]+|`[^`]+`/g)].map((m) => m[0].replace(/^[@`]|`$/g, '').toLowerCase()));
   if (zhSource) for (const m of text.matchAll(/[A-Za-z][A-Za-z-]{3,}/g)) names.add(m[0].toLowerCase());

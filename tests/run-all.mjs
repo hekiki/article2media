@@ -82,6 +82,16 @@ console.log('== Skills');
   r = exec(path.join(lone, 'scripts', 'cards.mjs'), ['--list']);
   check('单独拷走一个 skill、旁边没有 article2media → 明确提示要一起安装', r.code === 2 && /找不到共享引擎/.test(r.out), r.out);
 
+  // 图文速览 (--form digest): a single X post holds at most 4 images, and every section must be in them.
+  const { planCards } = await import(pathToFileURL(path.join(SKILL, 'scripts', 'lib', 'layout-card.mjs')).href);
+  for (const f of EXAMPLES) {
+    const c = JSON.parse(fs.readFileSync(f, 'utf8'));
+    const plan = planCards(c, '4:5', 0, 'digest');
+    const want = c.pages.flatMap((p) => p.sections).filter((s) => s.card?.mode !== 'skip').length;
+    const got = plan.filter((it) => it.kind === 'digest').reduce((a, it) => a + it.secs.length, 0);
+    check(`--form digest：${path.basename(f)} 最多 4 张（${plan.length} 张）、每节都在`, plan.length <= 4 && plan[0].kind === 'onepage' && got === want, JSON.stringify(plan.map((it) => it.kind)));
+  }
+
   // X posts whose substance is in attached videos: no network, a FxTwitter-shaped fixture.
   const { postToMarkdown } = await import(pathToFileURL(path.join(SKILL, 'scripts', 'lib', 'x-post.mjs')).href);
   const st = {
@@ -142,10 +152,24 @@ const tmpContent = (patch) => {
     delete g.cover.alts; fs.writeFileSync(bc, JSON.stringify(g));
     rb = run([bc, '--ratio', '3:4', '--covers', '--out', path.join(bd, 'covers2')]);
     check('--covers：没写备选时按可用版式各出一张（hook / quote / toc）', rb.code === 0 && ['hook', 'quote', 'toc'].every((st) => fs.readdirSync(path.join(bd, 'covers2')).some((x) => x.includes(`-${st}.png`))), rb.out);
-    for (const [form, stem] of [['onepage', 'onepage'], ['quotes', 'quote'], ['qa', 'qa']]) {
+    for (const [form, stem] of [['onepage', 'onepage'], ['quotes', 'quote'], ['qa', 'qa'], ['digest', 'digest']]) {
       rb = run([bc, '--ratio', '3:4', '--form', form, '--out', path.join(bd, form)]);
       check(`--form ${form}：出图、0 错误`, rb.code === 0 && /版面检查：0 个错误/.test(rb.out) && fs.existsSync(path.join(bd, form, `${stem}-01.png`)) && !fs.existsSync(path.join(bd, form, 'caption.md')), rb.out);
     }
+    // X 版长图: the phone page cut into 1080-wide strips X keeps as uploaded (≤ 4096 tall), PNG-8 (IHDR colour type 3) when ffmpeg is there.
+    rb = run([bc, '--x', '--out', path.join(bd, 'x')]);
+    const xd = path.join(bd, 'x');
+    const xs = fs.existsSync(xd) ? fs.readdirSync(xd).filter((x) => /^x-\d+-\d+\.png$/.test(x)) : [];
+    const ihdr = xs.map((x) => { const b = fs.readFileSync(path.join(xd, x)); return { x, w: b.readUInt32BE(16), h: b.readUInt32BE(20), type: b[25] }; });
+    const ff = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0;
+    const perPage = g.pages.map((_, i) => xs.filter((x) => x.startsWith(`x-${String(i + 1).padStart(2, '0')}-`)).length);
+    check('--x：每页切成 1080 宽、高 ≤ 4096 的竖条，PNG-8，0 错误、没有切口提示', rb.code === 0 && /版面检查：0 个错误/.test(rb.out) && !/切口/.test(rb.out) && perPage.every((n) => n >= 1)
+      && ihdr.every((d) => d.w === 1080 && d.h <= 4096 && d.h >= 400 && (!ff || d.type === 3)), rb.out + JSON.stringify(ihdr));
+    check('--x：切得不碎（每张平均高 ≥ 2000）、列出发帖分组', ihdr.reduce((a, d) => a + d.h, 0) / Math.max(1, ihdr.length) >= 2000 && /发帖分组/.test(rb.out) && /第 1 帖/.test(rb.out), rb.out);
+    const xh = fs.existsSync(path.join(xd, 'page-01.html')) ? fs.readFileSync(path.join(xd, 'page-01.html'), 'utf8') : '';
+    check('--x：用的是手机版页面（同一套版式）', /class="page m"/.test(xh) && !/x-cols/.test(xh), xh.slice(0, 300));
+    rb = run([bc, '--x', '--wide', '--out', path.join(bd, 'xw'), '--html-only']);
+    check('--x 和 --wide 一起用 → 报错', rb.code !== 0 && /--x/.test(rb.out), rb.out);
     rb = run([f, '--ratio', '3:4', '--form', 'qa', '--out', path.join(bd, 'noqa')]);
     check('--form qa 没有 qa 字段 → 报错', rb.code !== 0 && /qa/.test(rb.out), rb.out);
     rb = run([bc, '--ratio', '3:4', '--out', path.join(bd, 'cards'), '--html-only']);
@@ -668,6 +692,24 @@ console.log('\n== 批量 · 发布清单 · 发布记录');
   r = exec(BATCH, ['checklist', dirs[1]]);
   check('发布清单：标题 > 20、正文 > 1000、publish.titles 超长或类型不对 → ✗，退出码非零', r.code === 1 && /✗ 小红书：标题 22 \/ 20/.test(r.out) && /正文 1001 \/ 1000/.test(r.out) && /publish\.titles\.xhs\[0\]/.test(r.out) && /publish\.titles\.wechat 必须是非空字符串数组/.test(r.out), r.out);
 
+  // Publish checklist for X: strips are grouped into posts; a long image over 4096 px offered for X is an error.
+  const sized = (w, h) => { const b = Buffer.from(PNG); b.writeUInt32BE(w, 16); b.writeUInt32BE(h, 20); return b; };
+  const xdir = fakeDir('x1', 'midnight');
+  fs.mkdirSync(path.join(xdir, 'midnight'));
+  fs.writeFileSync(path.join(xdir, 'midnight', 'page-01.png'), sized(1080, 9000));
+  fs.writeFileSync(path.join(xdir, 'midnight', 'qa.json'), JSON.stringify([{ theme: 'midnight', issues: [] }]));
+  r = exec(BATCH, ['checklist', xdir]);
+  let xkit = fs.existsSync(path.join(xdir, 'publish.md')) ? fs.readFileSync(path.join(xdir, 'publish.md'), 'utf8') : '';
+  check('发布清单：只有手机长图（1080×9000）时，X 一节报 ✗ 并给出 --x', r.code === 1 && /✗ 这是 1080×9000 的长图：X 会把它压到约 492px 宽/.test(xkit) && /--x/.test(xkit), r.out + xkit);
+  fs.mkdirSync(path.join(xdir, 'midnight-x'));
+  const strips = [[1, 4], [2, 3], [3, 1], [4, 1]].flatMap(([p, n]) => Array.from({ length: n }, (_, k) => `x-0${p}-${k + 1}.png`));
+  for (const f of strips) fs.writeFileSync(path.join(xdir, 'midnight-x', f), sized(1080, 3200));
+  fs.writeFileSync(path.join(xdir, 'midnight-x', 'qa.json'), JSON.stringify([{ theme: 'midnight', issues: [] }]));
+  r = exec(BATCH, ['checklist', xdir]);
+  xkit = fs.existsSync(path.join(xdir, 'publish.md')) ? fs.readFileSync(path.join(xdir, 'publish.md'), 'utf8') : '';
+  check('发布清单：有 X 版时 X 一节用它，9 张一帖发完、按页序上传', /## X（midnight-x，9 张 X 长图）/.test(xkit) && /✓ 9 张，都在 X 的 4096px 以内，分 1 帖（每帖最多 20 张）/.test(xkit)
+    && /1\. 主帖：x-01-1\.png、x-01-2\.png、x-01-3\.png、x-01-4\.png、x-02-1\.png、x-02-2\.png、x-02-3\.png、x-03-1\.png、x-04-1\.png/.test(xkit), r.out + xkit);
+
   // Batch: local files as links, a video link (recorded, not fetched), a link that cannot be fetched, a stub article.
   fs.writeFileSync(path.join(src, 'pipeline.md'), `# Content Pipeline Notes\n\n${Array(20).fill(para).join('\n\n')}\n`);
   fs.writeFileSync(path.join(src, 'stub.md'), '# 预告\n\n完整内容请开通会员后查看。\n');
@@ -706,6 +748,17 @@ console.log('\n== 批量 · 发布清单 · 发布记录');
   // batch.mjs carries a copy of fetch.mjs's slug rule (fetch.mjs is a script, not a module): the two must not drift.
   const fn = (f) => fs.readFileSync(path.join(SKILL, 'scripts', f), 'utf8').match(/function slugify\(meta\) \{[\s\S]*?\n\}/)?.[0];
   check('批量：batch.mjs 的目录命名规则和 fetch.mjs 一致', !!fn('fetch.mjs') && fn('fetch.mjs') === fn('batch.mjs'));
+  // Batch spec x: the X strips are a form of their own, rendered with long.mjs --x.
+  {
+    const xr = path.join(OUT, 'batch-x');
+    fs.mkdirSync(path.join(xr, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(xr, 'src', 'x.md'), `# X 长图\n\n${Array(20).fill(para).join('\n\n')}\n`);
+    exec(BATCH, ['init', path.join(xr, 'src', 'x.md'), '--name', 'x', '--spec', 'x', '--root', xr, '--no-proxy']);
+    const xq = JSON.parse(fs.readFileSync(path.join(xr, 'batches', 'x', 'queue.json'), 'utf8'));
+    fs.copyFileSync(gallery, path.join(xr, xq.items[0].slug, 'content.json'));
+    const rx = exec(BATCH, ['next', 'x', '--root', xr]);
+    check('批量：--spec x 的下一步是 long.mjs … --x', /long\.mjs" ".*content\.json" --x/.test(rx.out), rx.out);
+  }
 }
 
 // ---------- 1g. Rewrite measured against its article (numbers, voice, pictures) + model-eval scoring ----------

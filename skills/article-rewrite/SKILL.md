@@ -3,7 +3,7 @@ name: article-rewrite
 description: 改写（总结）：把一篇文章读透、重组成一份和风格无关的结构化改写稿 content.json——核心主张、分页分节、每节的判断式标题、要点、金句、两张图表（柱状、流程、对比、结构等 20 多种）和数据面板，可选执行清单、核对数字、AI 插画；还能导出成一篇文章 rewrite.md（图表转成图片）。改写稿交给长图、卡片出图，rewrite.md 交给公众号排版。Use when the user wants an article summarized / restructured / 提炼 / 改写 / 整理成要点 for visual content, wants a 总结 before 长图、小红书卡片 or 公众号, or another article2media skill needs content.json; also when the user wants a structured summary article (总结稿) of a long post.
 argument-hint: <article.md|目录> [--pages N] [--lang zh|en] [--verify] [--illustrate] [--style 主题名]
 allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/scripts/*)
-version: "2.3.1"
+version: "2.4.0"
 ---
 
 # 改写（article-rewrite）
@@ -30,7 +30,7 @@ version: "2.3.1"
 ## 1. 规划
 **完整读一遍** `article.md`，再读 `references/writing-guide.md`，然后确定：
 - 核心主张（一句话）；
-- 页数和每页的 `part`，按 `references/content-schema.md` 末尾的密度表定（`--pages` 可强制 1–4 页）；
+- 页数和每页的 `part`：以讲清核心内容、总结到位为准，没有上限；`references/content-schema.md` 末尾的密度表是起点（`--pages N` 可指定页数）；
 - 每节的标题、两张图的类型、面板类型；
 - 主题：用户没指定时，按 `../article2media/references/styles.md` 选一个，写进 `theme`。
 

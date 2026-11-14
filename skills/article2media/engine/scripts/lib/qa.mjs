@@ -166,7 +166,7 @@ export function qaInPage(opts) {
   if (typeof window.__fit === 'function') window.__fit();
   for (const card of document.querySelectorAll('[data-card][data-dropped]')) {
     if (card.dataset.dropped && card.dataset.dropped !== '图注') {
-      const fix = card.dataset.kind === 'cover' ? '想保留就缩短 cover.subtitle、减少 cover.points，或把标题写短' : card.dataset.kind === 'end' ? '想保留就缩短各节的 takeaway 或 cover.summary' : card.dataset.kind === 'stages' || card.dataset.kind === 'guard' ? '想保留就缩短清单项或 paragraphs[0]' : '想保留就缩短 card.text，或用 "mode": "split"';
+      const fix = card.dataset.kind === 'cover' ? '想保留就缩短 cover.subtitle、减少 cover.points，或把标题写短' : card.dataset.kind === 'end' ? '想保留就缩短各节的 takeaway 或 cover.summary' : card.dataset.kind === 'stages' || card.dataset.kind === 'guard' ? '想保留就缩短清单项或 paragraphs[0]' : card.dataset.kind === 'digest' ? '图文速览放不下这几节的全部正文；各节要点都在第一张。想更完整就发线程版（每节一张卡）' : card.dataset.kind === 'onepage' ? '想保留就缩短各节的 takeaway，或写更短的 onepage.points' : '想保留就缩短 card.text，或用 "mode": "split"';
       issues.push({ level: 'warn', where: where(card.querySelector('.c-body')), msg: `放不下，已自动省略：${card.dataset.dropped}（${fix}）` });
     }
   }

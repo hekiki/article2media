@@ -7,9 +7,9 @@ import { coverIllustrationSrc, coverIllustrationAspect } from './illustrations.m
 
 export const RATIOS = {
   '3:4': { w: 540, h: 720, limit: 18, name: '小红书 / 3:4' }, // 小红书 allows at most 18 images per note
-  '4:5': { w: 540, h: 675, limit: 20, name: 'Instagram / 4:5' },
-  '1:1': { w: 540, h: 540, limit: 20, name: '方图 / 1:1' },
-  '9:16': { w: 540, h: 960, limit: 20, name: '竖屏 / 9:16' },
+  '4:5': { w: 540, h: 675, limit: 20, name: 'Instagram / 4:5' }, // Instagram carousels hold at most 20
+  '1:1': { w: 540, h: 540, limit: 0, name: '方图 / 1:1' }, // limit 0 = no platform cap: the content decides the count
+  '9:16': { w: 540, h: 960, limit: 0, name: '竖屏 / 9:16' },
 };
 export function ratioSpec(r = '3:4') {
   const spec = RATIOS[r];
@@ -77,6 +77,7 @@ const CL = {
     cont: '续',
     recap: '全文要点',
     onepage: '一页看完',
+    digest: '图文速览',
     qa: '问答',
     quote: '金句',
     cta: '收藏这组图，用的时候翻出来',
@@ -88,6 +89,7 @@ const CL = {
     cont: 'cont.',
     recap: 'Key takeaways',
     onepage: 'On one page',
+    digest: 'At a glance',
     qa: 'Q & A',
     quote: 'Quote',
     cta: 'Save this for later',
@@ -96,7 +98,7 @@ const CL = {
 };
 
 /** Decide which cards to make, in order. Shared by the builder and the validator. */
-export const FORMS = ['quotes', 'onepage', 'qa'];
+export const FORMS = ['quotes', 'onepage', 'qa', 'digest'];
 
 /** Sentences for the 金句图 form: content.quotes, or every section's takeaway. */
 export function quoteItems(c) {
@@ -123,10 +125,34 @@ function packQa(pairs, budget, titleLines = 1) {
   return out;
 }
 
+// 图文速览 (digest): the whole piece in at most 4 cards, for a single post on X (4 images at most) — e.g. quoting
+// someone's article with a summary. The one-page summary comes first (it must stand alone: a carousel shows it
+// largest), then the sections in up to 3 groups, one per page when the pages allow it. The content decides how
+// many cards there are; 4 is X's cap, not a target.
+export const DIGEST_MAX = 4;
+function planDigest(c) {
+  const pages = c.pages || [];
+  const secs = [];
+  let num = 0;
+  pages.forEach((pg, pi) => (pg.sections || []).forEach((s) => {
+    num += 1;
+    if (s.card?.mode !== 'skip') secs.push({ s, num, k: num - 1, part: pg.part, pi });
+  }));
+  const groups = [];
+  if (pages.length <= DIGEST_MAX - 1 && pages.every((pg) => (pg.sections || []).length <= 3)) {
+    pages.forEach((_, pi) => { const g = secs.filter((x) => x.pi === pi); if (g.length) groups.push(g); });
+  } else {
+    const n = Math.min(DIGEST_MAX - 1, Math.ceil(secs.length / 3));
+    for (let i = 0; i < n; i++) groups.push(secs.slice(Math.round((i * secs.length) / n), Math.round(((i + 1) * secs.length) / n)));
+  }
+  return [{ kind: 'onepage', kicker: 'digest' }, ...groups.map((g, i) => ({ kind: 'digest', secs: g, part: g[0].part, k: g[0].k, last: i === groups.length - 1 }))];
+}
+
 export function planCards(content, ratio = '3:4', budgetAdjust = 0, form = '') {
   const budget = ratioSpec(ratio).budget - budgetAdjust;
   if (form === 'quotes') return quoteItems(content).map((q, i) => ({ kind: 'quote', q, k: i }));
   if (form === 'onepage') return [{ kind: 'onepage' }];
+  if (form === 'digest') return planDigest(content);
   if (form === 'qa') return packQa(content.qa || [], budget, String(content.qaTitle || content.cover?.title || content.title || '').split('\n').length);
   const plan = [{ kind: 'cover' }];
   let num = 0;
@@ -358,17 +384,38 @@ function quoteOnlyCard(it, c) {
 }
 
 // 一页看完: the whole piece on one card — headline, one line of context, the points.
-function onepageCard(c, L) {
+function onepageCard(c, L, kicker = '') {
   const o = c.onepage || {};
-  const pts = onepagePoints(c).slice(0, 9);
+  // The digest's first card stands for the whole piece, so it lists every section's point (the list compacts itself).
+  const pts = onepagePoints(c).slice(0, kicker === 'digest' ? 16 : 9);
   // A full list leaves no room for the context line: only an explicit onepage.subtitle is kept then.
   const sub = o.subtitle ?? (pts.length > 6 ? '' : c.cover?.subtitle ?? c.pages?.[0]?.intro);
   return (
-    `<div class="cv-kicker">${md(o.kicker || L.onepage)}</div>` +
-    `<h1 class="op-title" data-qa-text>${md(o.title || c.cover?.title || c.title)}</h1>` +
+    `<div class="cv-kicker">${md(o.kicker || L[kicker || 'onepage'])}</div>` +
+    // The digest stands in for the long image, so it leads with the long image's headline (a full statement);
+    // a cover title is written to sit next to the cover's number or picture.
+    `<h1 class="op-title" data-qa-text${kicker === 'digest' ? ' data-fit-wrap' : ''}>${md(o.title || (kicker === 'digest' ? c.title || c.cover?.title : c.cover?.title || c.title))}</h1>` +
     (sub ? `<p class="op-sub" data-qa-text${drop(1, '导语')}>${md(sub)}</p>` : '') +
-    `<ol class="op-list" data-shrink>${pts.map((p, i) => `<li><i>${pad2(i + 1)}</i><div>${p.title ? `<b data-qa-text>${md(p.title)}</b>` : ''}<span data-qa-text>${md(p.text || '')}</span></div></li>`).join('')}</ol>`
+    `<ol class="op-list${kicker === 'digest' && pts.length > 9 ? ' dense' : ''}" data-shrink>${pts.map((p, i) => `<li><i>${pad2(i + 1)}</i><div>${p.title ? `<b data-qa-text>${md(p.title)}</b>` : ''}<span data-qa-text>${md(p.text || '')}</span></div></li>`).join('')}</ol>`
   );
+}
+
+// 图文速览 group card: a page's sections as numbered blocks — heading and paragraphs (the takeaways are on the
+// first card). Second paragraphs drop from the last section up when a group is dense; takeaways fill spare room.
+function digestCard(it, nAcc, footnote) {
+  const blocks = it.secs.map(({ s, num, k }) => {
+    const paras = s.kind === 'checklist'
+      ? [(s.stages || []).map((st) => plain(st.title || '')).filter(Boolean).join(' → ')]
+      : (s.paragraphs || []).slice(0, 2);
+    return `<div class="dg-sec acc" style="--acc:${accVar(k, nAcc)}">` +
+      `<div class="dg-h"><i>${pad2(num)}</i><div class="dg-t" data-qa-text>${md(plain(s.heading || '').replace(/\n/g, ''))}</div></div>` +
+      paras.filter(Boolean).map((p, j) => `<p class="dg-p" data-qa-text${j ? drop((2 + (99 - num) / 100).toFixed(2), `${pad2(num)} 节第二段`) : ''}>${md(p)}</p>`).join('') +
+      (s.takeaway ? `<p class="dg-take" data-qa-text data-fill="${num}" hidden>${md(s.takeaway)}</p>` : '') +
+      `</div>`;
+  }).join('');
+  return (it.part ? `<div class="sec-label">${md(it.part)}</div>` : '') +
+    `<div class="dg-list" data-shrink>${blocks}</div>` +
+    (it.last && footnote ? `<div class="end-src"${drop(3, '来源说明')}>${md(footnote)}</div>` : '');
 }
 
 // 问答: a chat thread, question bubbles on the right, answers on the left.
@@ -403,7 +450,7 @@ function endCard(c, L, footnote, brand) {
 /**
  * Build one HTML document holding every card in a grid (also used as a contact sheet).
  * ctx: { content, brand, themeCss, componentsCss, layoutCss, nAcc, ratio, form, covers }
- *   form    '' (the full set) | 'quotes' | 'onepage' | 'qa'  — lighter stand-alone forms from the same content
+ *   form    '' (the full set) | 'quotes' | 'onepage' | 'qa' | 'digest'  — lighter stand-alone forms from the same content
  *   covers  array of cover objects: draw only the cover, once per variant (for choosing between them)
  */
 export function coverVariants(c) {
@@ -443,7 +490,9 @@ export function buildCards(ctx) {
       case 'quote':
         return frame(`<div class="sec-label">${esc(L.quote)}${total > 1 ? ` · ${pad2(idx)}` : ''}</div>` + quoteOnlyCard(it, c), { ...base, cls: 'c-sec c-quote', acc: accVar(it.k, nAcc), foot: brandLine || credit, chip });
       case 'onepage':
-        return frame(onepageCard(c, L), { ...base, cls: 'c-onepage', acc: accVar(0, nAcc), foot: [credit, chip ? '' : brandFoot].filter(Boolean).join('　'), deco: COVER_DECO, chip });
+        return frame(onepageCard(c, L, it.kicker), { ...base, cls: 'c-onepage', acc: accVar(0, nAcc), foot: [credit, chip ? '' : brandFoot].filter(Boolean).join('　'), deco: COVER_DECO, chip });
+      case 'digest':
+        return frame(digestCard(it, nAcc, footnote), { ...base, cls: 'c-digest', acc: accVar(it.k, nAcc), foot: [credit, brandFoot].filter(Boolean).join('　') });
       case 'qa':
         return frame(qaCard(it, c, L, i === 0), { ...base, cls: 'c-qa', acc: accVar(i, nAcc), foot: [credit, brandFoot].filter(Boolean).join('　'), chip: i === 0 ? chip : '' });
       case 'sec': {
@@ -543,6 +592,14 @@ window.__fit = function () {
       var lh = function () { return parseFloat(getComputedStyle(t).lineHeight) || size * 1.16; };
       while (size > 36 && t.getBoundingClientRect().height > want * lh() + 2) { size -= 2; t.style.fontSize = size + 'px'; }
     }
+    // Headlines that must keep the author's line breaks (the digest leads with the long image's title).
+    card.querySelectorAll('[data-fit-wrap]').forEach(function (e) {
+      e.style.fontSize = '';
+      var want = e.querySelectorAll('br').length + 1;
+      var size = parseFloat(getComputedStyle(e).fontSize);
+      var lh = function () { return parseFloat(getComputedStyle(e).lineHeight) || size * 1.2; };
+      while (size > 26 && e.getBoundingClientRect().height > want * lh() + 2) { size -= 2; e.style.fontSize = size + 'px'; }
+    });
     // Full-card sentences: as large as possible while keeping their line breaks and fitting the card.
     card.querySelectorAll('[data-fit-lines]').forEach(function (e) {
       var want = e.querySelectorAll('br').length + 1;

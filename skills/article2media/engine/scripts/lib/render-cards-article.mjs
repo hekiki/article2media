@@ -84,7 +84,7 @@ export async function renderCardsArticle(input, { opt, THEMES_DIR, readCss, spec
     const broken = await page.evaluate(() => [...document.images].filter((i) => !i.complete || !i.naturalWidth).length);
     if (broken) issues.push({ level: 'error', where: '配图', msg: `${broken} 张原文配图没有加载出来` });
     const n = flow.boxes.length;
-    if (n > spec.limit) issues.push({ level: 'warn', where: '张数', msg: `共 ${n} 张，超过单篇上限 ${spec.limit} 张：分成两篇发，或改用原文长图` });
+    if (spec.limit && n > spec.limit) issues.push({ level: 'warn', where: '张数', msg: `共 ${n} 张，超过单篇上限 ${spec.limit} 张：分成两篇发，或改用原文长图` });
 
     await page.setViewport(deckW, flow.deck.height + 48, 2);
     for (const b of flow.boxes) {

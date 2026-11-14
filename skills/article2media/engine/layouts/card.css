@@ -241,10 +241,31 @@ body { width: max-content; background: var(--sheet-bg, #9a9a96); }
 .op-list.shrink li { padding: 7px 0; }
 .op-list.shrink li span { font-size: 15px; }
 .op-list.shrink li b { display: none; }
+.op-list.dense.shrink li { padding: 4px 0; }
+.op-list.dense.shrink li i { font-size: 17px; width: 26px; }
+.op-list.dense.shrink li span { font-size: 14px; line-height: 1.4; }
+.r-1x1 .op-list.dense.shrink { display: block; columns: 2; column-gap: 18px; }
+.r-1x1 .op-list.dense.shrink li { break-inside: avoid; }
 .card.roomy .op-list li { padding: 15px 0; }
 .card.roomy .op-list li span { font-size: 19px; }
 .card.roomy .op-list li b { font-size: 14px; }
 .card.roomy .op-title { font-size: 50px; }
+
+/* ---------- 图文速览 (digest): a page's sections as numbered blocks ---------- */
+.dg-list { display: flex; flex-direction: column; gap: 16px; }
+.dg-sec { border-left: 3px solid var(--acc); padding: 1px 0 1px 14px; }
+.dg-h { display: flex; align-items: baseline; gap: 9px; }
+.dg-h i { flex: none; font-style: normal; font-family: var(--font-label, var(--font-head)); font-weight: 900; font-size: 15px; color: var(--acc-text); }
+.dg-t { font-family: var(--font-head); font-weight: var(--w-h2, 900); font-size: 19.5px; line-height: 1.35; color: var(--h2-card-ink, var(--ink)); text-wrap: balance; }
+.dg-p { font-size: 14.5px; line-height: 1.65; margin-top: 6px; }
+.dg-take { font-size: 14px; line-height: 1.55; font-weight: 700; margin-top: 7px; color: var(--acc-text); }
+.dg-list.shrink { gap: 11px; }
+.dg-list.shrink .dg-t { font-size: 17.5px; }
+.dg-list.shrink .dg-p { font-size: 13.5px; line-height: 1.55; margin-top: 4px; }
+.card.roomy .dg-list { gap: 20px; }
+.card.roomy .dg-t { font-size: 21px; }
+.card.roomy .dg-p { font-size: 16px; }
+.card.roomy .dg-take { font-size: 15px; }
 
 .c-qa .c-body { gap: 0; }
 .qa-title { font-family: var(--font-head); font-weight: var(--w-title, 900); font-size: 34px; line-height: 1.25; margin: 10px 0 16px; color: var(--title-ink, var(--ink)); text-wrap: balance; }

@@ -142,20 +142,33 @@ export function parseBlocks(body, { title, boldHeadings = true } = {}) {
 
 /** Plain text of the source as a reader sees it (markdown syntax removed), for the parser coverage check. */
 export function sourcePlain(body) {
-  return body
+  return tablePipes(body
     .replace(/\r\n?/g, '\n')
     .replace(/^```.*$/gm, '')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/^\s*#{1,6}\s+/gm, '')
     .replace(/^\s*>\s?/gm, '')
-    .replace(/^\s*([-*+]|\d+[.)])\s+/gm, '')
-    .replace(/^\s*\|?\s*:?-{2,}[-:|\s]*$/gm, '')
-    .replace(/\|/g, '')
+    .replace(/^\s*([-*+]|\d+[.)])\s+/gm, ''))
     .replace(/^\s*(-{3,}|\*{3,}|_{3,})\s*$/gm, '')
     .replace(/\*\*|__|`/g, '')
     .replace(/(^|[^*\w])\*([^*\s][^*]*?)\*/g, '$1$2')
     .replace(/\\([\\`*_{}\[\]()#+\-.!>])/g, '$1');
+}
+/** Drop table syntax the way parseBlocks reads it: a "| … |" row followed by a separator row starts a table, and its
+ *  rows lose their pipes. A pipe anywhere else ("【A | B】" in a title) is text and stays. */
+function tablePipes(text) {
+  const lines = text.split('\n');
+  const isRow = (l) => /^\s*\|.*\|\s*$/.test(l);
+  for (let i = 0; i < lines.length; i++) {
+    if (!isRow(lines[i]) || !/^\s*\|?\s*:?-{2,}/.test(lines[i + 1] || '')) continue;
+    lines[i] = lines[i].replace(/\|/g, '');
+    lines[i + 1] = '';
+    let j = i + 2;
+    while (j < lines.length && isRow(lines[j])) { lines[j] = lines[j].replace(/\|/g, ''); j++; }
+    i = j - 1;
+  }
+  return lines.join('\n');
 }
 export const squash = (s) => String(s).replace(/\s+/g, '');
 

@@ -49,7 +49,6 @@ export function validate(c, { layout = 'long', ratio = '3:4' } = {}) {
   }
   if (!c.source) warn('source', '缺少原文信息，页脚将没有来源行');
   if (!arr('pages', c.pages, 1, 'pages ')) return { errors, warnings, info };
-  if (c.pages.length > 4) warn('pages', `共 ${c.pages.length} 页，建议不超过 4 页`);
 
   c.pages.forEach((pg, pi) => {
     const P = `pages[${pi}]`;
@@ -168,9 +167,9 @@ export function validate(c, { layout = 'long', ratio = '3:4' } = {}) {
     const most = planCards(c, ratio, Math.round(spec.budget * 0.06)).length;
     info.cards = plan.length;
     info.cardsMax = Math.max(most, plan.length);
-    if (plan.length > spec.limit) {
+    if (spec.limit && plan.length > spec.limit) {
       err('cards', `将生成 ${plan.length} 张卡片，超过 ${spec.name} 单篇上限 ${spec.limit} 张：给次要的节加 "card": {"mode": "skip"}，或少用 split`);
-    } else if (info.cardsMax > spec.limit) {
+    } else if (spec.limit && info.cardsMax > spec.limit) {
       warn('cards', `预计 ${plan.length} 张，但清单分页后可能变成 ${info.cardsMax} 张，超过 ${spec.name} 上限 ${spec.limit} 张：先 skip 一节次要的，留出余量`);
     }
     const cover = c.cover || {};

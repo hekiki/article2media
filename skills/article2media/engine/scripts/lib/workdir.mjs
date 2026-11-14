@@ -3,6 +3,7 @@
 // where they were posted, and the publish.md checklist. Shared by stats.mjs and batch.mjs; nothing here renders.
 import fs from 'node:fs';
 import path from 'node:path';
+import { groupPosts, parseStripName, X_STRIP } from './x-strips.mjs';
 
 export const PLATFORMS = { xhs: '小红书', wechat: '公众号', x: 'X', douyin: '抖音', channels: '视频号', weibo: '微博', other: '其他' };
 const PLATFORM_ALIASES = {
@@ -24,20 +25,20 @@ export const METRICS = [
   { key: 'follows', zh: '涨粉' },
 ];
 export const FORMS = {
-  cards: '总结卡片', 'cards-original': '原文卡片', long: '总结长图', 'long-original': '原文长图',
+  cards: '总结卡片', 'cards-original': '原文卡片', long: '总结长图', 'long-x': 'X 长图', 'long-original': '原文长图',
   wechat: '公众号排版', video: '口播视频', whiteboard: '白板', comic: '漫画',
 };
 // Which forms a platform usually takes, most likely first (used to guess what a post was).
 const PLATFORM_FORMS = {
   xhs: ['cards', 'cards-original', 'comic', 'video'],
   wechat: ['wechat'],
-  x: ['long', 'long-original', 'cards', 'video'],
+  x: ['long-x', 'long', 'long-original', 'cards', 'video'],
   douyin: ['video', 'cards'],
   channels: ['video'],
   weibo: ['long', 'cards', 'long-original'],
   other: Object.keys(FORMS),
 };
-export const LIMITS = { xhsTitle: 20, xhsBody: 1000, xhsImages: 18, wechatTitle: 64, wechatDigest: 120, xImages: 4 };
+export const LIMITS = { xhsTitle: 20, xhsBody: 1000, xhsImages: 18, wechatTitle: 64, wechatDigest: 120, xImages: 20 };
 
 export const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
 export const readText = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } };
@@ -74,6 +75,8 @@ function classify(dir, name) {
   const cards = numbered(files, 'card');
   const pages = numbered(files, 'page');
   const fulls = files.filter((f) => /^full(-\d+)?\.png$/.test(f)).sort();
+  // X strips (long.mjs --x): x-<page>-<k>.png, in upload order.
+  const strips = files.filter((f) => parseStripName(f)).sort((a, b) => { const x = parseStripName(a), y = parseStripName(b); return x.page - y.page || x.k - y.k; });
   const base = path.basename(name);
   const ratio = base.match(/(?:^|-)(\d+)x(\d+)(?:-|$)/);
   const o = {
@@ -88,6 +91,7 @@ function classify(dir, name) {
   else if (files.includes('wechat.md') || files.includes('article-body.html')) Object.assign(o, { form: 'wechat', theme: o.theme || prefix(/-wechat.*$/), files: ['article.html'], cover: files.includes('cover-2.35x1.png') ? 'cover-2.35x1.png' : null, ratio: null });
   else if (files.includes('comic.png')) Object.assign(o, { form: 'comic', theme: null, files: cards.length ? cards : ['comic.png'], cover: cards[0] || 'comic.png', ratio: cards.length ? '3:4' : null });
   else if (files.includes('whiteboard.png')) Object.assign(o, { form: 'whiteboard', theme: null, files: ['whiteboard.png'], cover: 'whiteboard.png' });
+  else if (strips.length) Object.assign(o, { form: 'long-x', theme: o.theme || prefix(/-x$/), files: strips, cover: strips[0] });
   else if (cards.length) {
     const original = (qa && !Array.isArray(qa) && 'verify' in qa) || files.includes('ledger.json');
     Object.assign(o, { form: original ? 'cards-original' : 'cards', theme: original ? prefix(/-?full.*$/) : o.theme || prefix(/-\d+x\d+.*$/), files: cards, cover: cards[0] });
@@ -238,6 +242,40 @@ export const latestSnapshot = (post) => [...(post.snapshots || [])].sort((a, b) 
 
 // ---------- publish.md ----------
 
+/** Width and height of a PNG or JPEG file, or null. */
+export function imageSize(file) {
+  let b;
+  try { b = fs.readFileSync(file); } catch { return null; }
+  if (b.length > 24 && b.readUInt32BE(0) === 0x89504e47) return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
+  if (b[0] === 0xff && b[1] === 0xd8) {
+    for (let i = 2; i + 9 < b.length; ) {
+      if (b[i] !== 0xff) { i++; continue; }
+      const m = b[i + 1];
+      if (m >= 0xc0 && m <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(m)) return { w: b.readUInt16BE(i + 7), h: b.readUInt16BE(i + 5) };
+      i += 2 + b.readUInt16BE(i + 2);
+    }
+  }
+  return null;
+}
+/** X strip files → [{ page, n }] for groupPosts. */
+const stripsByPage = (files) => {
+  const out = [];
+  for (const f of files) {
+    const s = parseStripName(f);
+    if (!s) continue;
+    if (out.at(-1)?.page === s.page) out.at(-1).n++;
+    else out.push({ page: s.page, n: 1 });
+  }
+  return out;
+};
+const stripUploads = (o, posts) => {
+  let i = 0;
+  return [
+    `### 上传顺序（X 每帖最多 ${LIMITS.xImages} 张；超过时第 1 帖是主帖，之后每帖回复上一帖，接成线程）`, '', `目录：${o.path}`, '',
+    ...posts.map((p, n) => `${n + 1}. ${n ? '回复' : '主帖'}：${p.map(() => o.files[i++]).join('、')}`), '',
+  ];
+};
+
 /**
  * Build the publish checklist of one work directory. Pure: returns { md, checks, platforms } and writes nothing.
  * checks: [{ platform, level: 'ok' | 'warn' | 'error', text }]. `schedule` is the user's own plan ({ xhs: '周二 20:00' }).
@@ -323,18 +361,32 @@ export function buildPublishKit(dir, { schedule = {}, statsCmd = 'stats.mjs' } =
     });
   }
 
-  // X: long pages attached to a post.
-  pick = pickOutput(outputs, { platform: 'x', form: outputs.some((o) => o.form === 'long') ? 'long' : 'long-original', content });
+  // X: the X strips (long.mjs --x). A phone or original long image only when nothing else was made, flagged when it is
+  // taller than X's 4096 px cap — X shrinks it to a few hundred px wide and the text can no longer be read.
+  const xForm = ['long-x', 'long', 'long-original'].find((f) => outputs.some((o) => o.form === f));
+  pick = xForm ? pickOutput(outputs, { platform: 'x', form: xForm, content }) : { output: null, others: [] };
   if (pick.output) {
     const o = pick.output;
     const title = plainTitle(content?.title) || fm.title || '';
-    section('x', `X（${o.name}，${o.count} 张长图）`, o, pick.others, ({ add }) => {
-      add(o.count <= LIMITS.xImages ? 'ok' : 'warn', `图片 ${o.count} / ${LIMITS.xImages} 张${o.count <= LIMITS.xImages ? '' : '：单帖放不下，分成线程发'}`);
+    const isStrips = o.form === 'long-x';
+    const posts = isStrips ? groupPosts(stripsByPage(o.files)) : null;
+    section('x', `X（${o.name}，${o.count} 张${isStrips ? ' X 长图' : '长图'}）`, o, pick.others, ({ add }) => {
+      const sizes = o.files.map((f) => ({ f, d: imageSize(path.join(o.path, f)) })).filter((x) => x.d);
+      const tall = sizes.filter((x) => Math.max(x.d.w, x.d.h) > X_STRIP.maxPx);
+      if (isStrips) {
+        add(tall.length ? 'error' : 'ok', tall.length ? `${tall.map((x) => x.f).join('、')} 超过 ${X_STRIP.maxPx}px：重新运行 long.mjs --x` : `${o.count} 张，都在 X 的 ${X_STRIP.maxPx}px 以内，分 ${posts.length} 帖（每帖最多 ${LIMITS.xImages} 张）`);
+      } else {
+        if (tall.length) {
+          const d = tall.reduce((m, x) => (Math.max(x.d.w, x.d.h) > Math.max(m.d.w, m.d.h) ? x : m)).d;
+          add('error', `这是 ${d.w}×${d.h} 的长图：X 会把它压到约 ${Math.round((d.w * X_STRIP.maxPx) / Math.max(d.w, d.h))}px 宽，手机上看不清、电脑上发糊。发 X 先出 X 版：long.mjs content.json --x`);
+        }
+        add(o.count <= LIMITS.xImages ? 'ok' : 'warn', `图片 ${o.count} / ${LIMITS.xImages} 张${o.count <= LIMITS.xImages ? '' : '：单帖放不下，分成线程发'}`);
+      }
       noAlternates('x', add);
       return [
         '### 帖子文案候选', '', ...candidates('x', title, cpLen, 0), '',
         ...(fm.url ? ['原文链接（引用或放在回复里）：' + fm.url, ''] : []),
-        ...uploads(o),
+        ...(isStrips ? stripUploads(o, posts) : uploads(o)),
       ];
     });
   }

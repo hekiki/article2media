@@ -49,7 +49,8 @@
 .box { border-width: 1.6px; border-radius: 12px; }
 .box.hl { background: linear-gradient(135deg, var(--acc), color-mix(in srgb, var(--acc) 55%, #FFC83D)); border-color: transparent; }
 .hb-bar { border-radius: 99px; background: linear-gradient(90deg, var(--acc), color-mix(in srgb, var(--acc) 55%, #FFC83D)); }
-.ss-val { background: linear-gradient(90deg, var(--acc), #FF9A1A); -webkit-background-clip: text; background-clip: text; color: transparent; }
+/* The gradient hugs the number and runs through oklch, so a blue or green accent meets the orange through bright hues, not grey. */
+.ss-val { width: fit-content; margin-inline: auto; background: linear-gradient(90deg in oklch, var(--acc), #FF9A1A); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .cmp-col { border-radius: 16px; }
 /* Gradient takeaways */
 .c-take, .sec-take { background: linear-gradient(90deg, color-mix(in srgb, var(--acc) 20%, #FFFFFF), color-mix(in srgb, #FFD23F 28%, #FFFFFF)); color: var(--ink); font-weight: 700; }

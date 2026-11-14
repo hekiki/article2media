@@ -153,7 +153,7 @@ node skills/article2media/scripts/fonts.mjs    # 可选：把主题字体下载�
 
 | 产出 | 规格 | 适合 | 触发方式 | 示例里的主题 |
 |---|---|---|---|---|
-| **总结长图**（默认） | 手机版：1080 宽单栏，1–4 页；每节有标题、要点、两张图表和一个数据面板，结尾附执行清单。`--wide` 出 1200 宽的双栏杂志版 | 把长文读成一份可收藏的拆解；发微信、朋友圈、微博 | 不加参数 | `editorial` |
+| **总结长图**（默认） | 手机版：1080 宽单栏，页数由内容决定；每节有标题、要点、两张图表和一个数据面板，结尾附执行清单。`--wide` 出 1200 宽的双栏杂志版；`--x` 出发 X 的版本（同一版式切成 1080 宽、高不超过 4096 的竖条：X 不压缩，手机上点开不用放大） | 把长文读成一份可收藏的拆解；发微信、朋友圈、微博；发 X 用 `--x` | 不加参数 | `editorial` |
 | **卡片组** | 小红书 3:4（1080×1440）、IG 4:5、1:1、9:16；封面（6 种版式）+ 每节一卡（可穿插整页金句、大数字、整页图）+ 清单 + 要点，附发帖文案 | 信息流平台 | 提到比例或平台，或 `--ratio 3:4` | `brutal` |
 | **封面多版本** | 同一篇的几版封面：不同版式，或不同的标题钩子 | 挑封面；分开发布比效果 | 「多出几个封面」，或 `--covers` | `dopamine` |
 | **轻量形态** | 一页看完（一张图讲完全文）、金句图（每句一张）、问答卡（对话气泡） | 高频更新；给整组卡片引流 | 「一张图讲完」「金句图」「问答形式」，或 `--form` | `bento`、`guochao` |
@@ -258,7 +258,7 @@ flowchart LR
 |---|---|
 | **封面多版本** | `cards.mjs content.json --covers`：同一篇出几版封面（不同版式，或 `cover.alts` 里写的不同钩子），挑一版，或分开发布比效果 |
 | **品牌包** | `brand.json` 里写头像、品牌色、期号、一行介绍：封面左上角、末张品牌栏、长图页脚统一带上，读者认得出是谁的图 |
-| **轻量形态** | `--form onepage` 一页看完、`--form quotes` 金句图、`--form qa` 问答卡：同一份改写稿切出来，适合高频更新和引流 |
+| **轻量形态** | `--form onepage` 一页看完、`--form quotes` 金句图、`--form qa` 问答卡、`--form digest` 图文速览（最多 4 张讲完，X 单帖用）：同一份改写稿切出来，适合高频更新、引流和转发配图 |
 | **批量** | `batch.mjs init links.txt --spec "cards:3:4,long,wechat"`：一次抓一批链接，生成看板 `queue.md`；Claude 按 `next` 一条条做 |
 | **发布清单** | `batch.mjs checklist <批次或目录>`：每篇一份 `publish.md`——上传顺序、备选标题、文案、标签、平台限制检查 |
 | **效果闭环** | 发布后说一句数据，`stats.mjs add` 记进 `publish.json`；`stats.mjs report` 按平台对比主题、封面版式、形式的收藏率和互动率，样本不足 5 条的明确标注 |
@@ -583,7 +583,7 @@ node $K/long-image/scripts/long.mjs <slug>/content.json --wide                  
 node $K/long-image/scripts/long.mjs <slug>/article.md                           # 原文长图
 node $K/image-cards/scripts/cards.mjs <slug>/content.json --ratio 3:4           # 总结卡片：3:4 / 4:5 / 1:1 / 9:16
 node $K/image-cards/scripts/cards.mjs <slug>/content.json --covers              # 只出封面的几个版本
-node $K/image-cards/scripts/cards.mjs <slug>/content.json --form onepage        # 轻量形态：onepage | quotes | qa
+node $K/image-cards/scripts/cards.mjs <slug>/content.json --form onepage        # 轻量形态：onepage | quotes | qa | digest
 node $K/image-cards/scripts/cards.mjs <slug>/article.md --ratio 3:4             # 原文卡片
 node $K/wechat-layout/scripts/wechat.mjs <slug>/article.md --theme quiet        # 公众号排版（原文、译文或 rewrite.md）
 node $K/logic-whiteboard/scripts/whiteboard.mjs <slug>/article.md               # 白板：先生成来源清单
