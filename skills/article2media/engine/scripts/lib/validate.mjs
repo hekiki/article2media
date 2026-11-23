@@ -3,6 +3,7 @@ import { vlen, plain } from './markup.mjs';
 import { FIGURE_TYPES } from './figures.mjs';
 import { planCards, ratioSpec, xhsLen, COVER_STYLES, CARD_STYLES } from './layout-card.mjs';
 import { validatePublishTitles } from './workdir.mjs';
+import { X_KINDS, xBlockType } from './layout-long.mjs';
 
 const LIMITS = {
   titleLine: 14,
@@ -23,7 +24,7 @@ const LIMITS = {
   stageItem: 34,
 };
 
-export function validate(c, { layout = 'long', ratio = '3:4' } = {}) {
+export function validate(c, { layout = 'long', ratio = '3:4', x = false } = {}) {
   const errors = [];
   const warnings = [];
   const err = (p, m) => errors.push(`${p}: ${m}`);
@@ -48,6 +49,9 @@ export function validate(c, { layout = 'long', ratio = '3:4' } = {}) {
     err('theme', 'theme 必须是主题名（如 "editorial"），或 {"long": "…", "cards": "…", "wechat": "…"}');
   }
   if (!c.source) warn('source', '缺少原文信息，页脚将没有来源行');
+  // An X-only piece (content.json with "x" and no pages) is just the X draft.
+  if (x && c.pages === undefined && c.x !== undefined) { validateX(c.x); return { errors, warnings, info }; }
+  if (c.pages === undefined && c.x !== undefined) { err('pages', '这份 content.json 只有 X 稿（x），只能出 X 版（--x）；要出手机长图、卡片，先写 pages'); return { errors, warnings, info }; }
   if (!arr('pages', c.pages, 1, 'pages ')) return { errors, warnings, info };
 
   c.pages.forEach((pg, pi) => {
@@ -63,7 +67,6 @@ export function validate(c, { layout = 'long', ratio = '3:4' } = {}) {
       if (!isStr(s.heading)) err(S, '缺少 heading');
       len(`${S}.heading`, s.heading, LIMITS.heading, '小标题');
       (s.paragraphs || []).forEach((t, i) => len(`${S}.paragraphs[${i}]`, t, LIMITS.paragraph, '段落'));
-
       if (s.kind === 'checklist') {
         if (!arr(`${S}.stages`, s.stages, 1, 'stages ')) return;
         s.stages.forEach((st, j) => {
@@ -112,6 +115,73 @@ export function validate(c, { layout = 'long', ratio = '3:4' } = {}) {
     const pr = typeof cvIll === 'string' ? cvIll : cvIll?.prompt;
     if (!isStr(pr)) err('cover.illustration', '封面插画需要 prompt：写成 {"prompt": "画面描述"} 或直接写字符串');
     if (cvIll?.aspect && !ASPECTS.includes(cvIll.aspect)) err('cover.illustration.aspect', `aspect 只能是 ${ASPECTS.join(' / ')}`);
+  }
+
+  // ---- X version draft (long.mjs --x): text first, written for the kind of piece ----
+  if (c.x !== undefined || x) validateX(c.x);
+  function validateX(d) {
+    const P = 'x';
+    if (!d || typeof d !== 'object' || Array.isArray(d)) {
+      err(P, 'X 版要 content.json 里的 "x"：先判断内容类型，再按类型写一份以文字为主的 X 稿（见 content-schema.md「X 版」）；只要手机版切条，用 --x full');
+      return;
+    }
+    const kinds = Object.keys(X_KINDS);
+    if (!kinds.includes(d.kind)) err(`${P}.kind`, `先判断内容类型：kind 只能是 ${kinds.join(' / ')}（故事经历 / 教程方法 / 盘点清单 / 报告观点 / 新闻动态）`);
+    if (d.title !== undefined) {
+      if (!isStr(d.title)) err(`${P}.title`, 'title 必须是文字（不写就用顶层 title）');
+      else d.title.split('\n').forEach((l, i) => len(`${P}.title 第 ${i + 1} 行`, l, LIMITS.titleLine, '标题'));
+    }
+    len(`${P}.intro`, d.intro, LIMITS.intro, '导语');
+    if (!Array.isArray(d.blocks) || !d.blocks.length) { err(`${P}.blocks`, 'blocks 至少需要 1 项'); return; }
+    let quoted = 0, total = 0, figs = 0;
+    const count = (t) => { const n = typeof t === 'string' ? vlen(t) : 0; total += n; return n; };
+    d.blocks.forEach((b, i) => {
+      const B = `${P}.blocks[${i}]`;
+      const t = xBlockType(b);
+      if (t.length !== 1) {
+        err(B, t.length ? `一个块只放一种内容，这里同时有 ${t.join('、')}` : '每个块是 {"h"}、{"quote"}、{"note"}、{"text"}、{"list"}、{"table"}、{"key"}、{"code"}、{"figure"} 之一');
+        return;
+      }
+      const [k] = t, v = b[k];
+      if (k === 'h') { if (!isStr(v)) err(B, 'h 是小标题文字'); len(`${B}.h`, v, LIMITS.heading, '小标题'); count(v); }
+      else if (k === 'quote') {
+        const ps = Array.isArray(v) ? v : [v];
+        if (!ps.length || !ps.every(isStr)) err(B, 'quote 是原文的一段，或几段组成的数组（只删不改）');
+        else ps.forEach((p) => { quoted += count(p); });
+        if (b.who !== undefined && !isStr(b.who)) err(`${B}.who`, 'who 是说话人，如"当事人""评论区网友"');
+      } else if (k === 'note') {
+        if (!isStr(v)) err(B, 'note 是编者短评的文字');
+        len(`${B}.note`, v, 80, '短评');
+        count(v);
+        if (b.label !== undefined && !isStr(b.label)) err(`${B}.label`, 'label 是短评的标签文字，如"拆解"');
+        len(`${B}.label`, b.label, 4, '短评标签');
+      } else if (k === 'text') {
+        const ps = Array.isArray(v) ? v : [v];
+        if (!ps.length || !ps.every(isStr)) err(B, 'text 是一段文字，或几段组成的数组');
+        else ps.forEach((p, j) => { len(Array.isArray(v) ? `${B}.text[${j}]` : `${B}.text`, p, 160, '段落'); count(p); });
+      } else if (k === 'key') { if (!isStr(v)) err(B, 'key 是一句关键的话'); len(`${B}.key`, v, 40, '关键句'); count(v); }
+      else if (k === 'list') {
+        if (!Array.isArray(v) || !v.length || !v.every(isStr)) err(B, 'list 是文字数组');
+        else v.forEach((p, j) => { len(`${B}.list[${j}]`, p, 80, '列表项'); count(p); });
+      } else if (k === 'table') {
+        if (!v || typeof v !== 'object' || !Array.isArray(v.rows) || !v.rows.length) { err(B, 'table 需要 rows：[["名称", "额度", "一句评价"], …]，可加 head、title、note'); return; }
+        if (v.head !== undefined && !Array.isArray(v.head)) { err(`${B}.table.head`, 'head 是表头文字数组'); return; }
+        const cols = (v.head || v.rows[0] || []).length;
+        v.rows.forEach((r, j) => {
+          if (!Array.isArray(r) || r.length !== cols) err(`${B}.table.rows[${j}]`, `每行 ${cols} 格，和${v.head ? '表头' : '第一行'}一样多`);
+          else r.forEach((cell) => count(String(cell)));
+        });
+        if (cols > 4) warn(`${B}.table`, `${cols} 列在手机宽度放不下：最多 4 列，次要的并进最后一列的说明`);
+      } else if (k === 'code') { if (!isStr(v)) err(B, 'code 是命令或提示词原文'); count(v); }
+      else if (k === 'figure') { figs++; checkFigure(v, `${B}.figure`); }
+    });
+    if (xBlockType(d.blocks.at(-1))[0] === 'h') warn(`${P}.blocks`, '最后一块是小标题，下面没有内容');
+    if (figs > 2) warn(`${P}.blocks`, `X 版以文字为主，现在有 ${figs} 张图：只留文字说不清的一两张`);
+    else if (figs && ['story', 'news'].includes(d.kind)) warn(`${P}.blocks`, `${d.kind === 'story' ? '故事' : '新闻'}用不上图：原文和短评就够了，把图删掉`);
+    if (d.kind === 'story' && total && quoted / total < 0.4) {
+      warn(`${P}.blocks`, `故事以原文为主：原文节选只占 ${Math.round((quoted / total) * 100)}%，写到 40% 以上——情节用当事人的原话讲，短评只点一句`);
+    }
+    info.xChars = Math.round(total);
   }
 
   function checkFigure(f, F) {

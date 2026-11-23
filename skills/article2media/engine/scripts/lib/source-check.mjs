@@ -60,7 +60,7 @@ export function sourceNumbers(text) {
 }
 
 // Text fields that carry content (not ids, styles, links or the source credit).
-const SKIP = new Set(['src', 'url', 'theme', 'style', 'type', 'mode', 'kind', 'fit', 'aspect', 'lang', 'date', 'handle', 'source', 'footnote', 'brand', 'issue', 'illustration', 'highlight', 'cols', 'leaves', 'index', 'max', 'figure', 'reverse', 'direction', 'voice']);
+const SKIP = new Set(['src', 'url', 'theme', 'style', 'type', 'mode', 'kind', 'fit', 'aspect', 'lang', 'date', 'handle', 'source', 'footnote', 'brand', 'issue', 'illustration', 'highlight', 'cols', 'leaves', 'index', 'max', 'reverse', 'direction', 'voice']);
 function* texts(o, where = '') {
   if (typeof o === 'string') { yield [where, o]; return; }
   if (Array.isArray(o)) { for (let i = 0; i < o.length; i++) yield* texts(o[i], `${where}[${i}]`); return; }
@@ -69,6 +69,9 @@ function* texts(o, where = '') {
 // A figure or panel that says its numbers are illustrative or the editor's own may carry them.
 const DECLARED = /示意|编者|换算|估算|推算|核对/;
 const declared = (c, where) => {
+  // An X draft block (the editor's note or text) may say so in its own words: "按原文的例子推算".
+  const xm = where.match(/^x\.blocks\[(\d+)\]/);
+  if (xm) { const b = c.x?.blocks?.[xm[1]]; return !!b && !('quote' in b) && DECLARED.test(JSON.stringify(b)); }
   const m = where.match(/^pages\[(\d+)\]\.sections\[(\d+)\]\.(figures\[\d+\]|panel)/);
   if (!m) return false;
   const s = c.pages?.[m[1]]?.sections?.[m[2]];
@@ -167,7 +170,7 @@ export function stray(c, text) {
  * Warnings for content.json measured against its article. brand: the resolved brand (to tell a user's own
  * article from someone else's).
  */
-export function sourceChecks(c, text, { brand = {} } = {}) {
+export function sourceChecks(c, text, { brand = {}, xOnly = false } = {}) {
   const warnings = [];
   const warn = (p, m) => warnings.push(`${p}: ${m}`);
 
@@ -183,7 +186,7 @@ export function sourceChecks(c, text, { brand = {} } = {}) {
   const own = c.voice === 'self' || (author && brand.name && (author.includes(brand.name) || brand.name.includes(author)));
   if (!own && author) {
     const heads = [
-      ['title', c.title], ['cover.title', c.cover?.title], ['cover.subtitle', c.cover?.subtitle], ['xhs.title', c.xhs?.title], ['wechat.title', c.wechat?.title],
+      ['title', c.title], ['x.title', c.x?.title], ['cover.title', c.cover?.title], ['cover.subtitle', c.cover?.subtitle], ['xhs.title', c.xhs?.title], ['wechat.title', c.wechat?.title],
       ...(c.cover?.alts || []).map((a, i) => [`cover.alts[${i}].title`, a?.title]),
       ...Object.entries(c.publish?.titles || {}).flatMap(([k, list]) => (Array.isArray(list) ? list : []).map((t, i) => [`publish.titles.${k}[${i}]`, t])),
     ];
@@ -193,6 +196,9 @@ export function sourceChecks(c, text, { brand = {} } = {}) {
       }
     }
   }
+
+  // An X-only draft is compressed by design: coverage and the article's pictures apply to a full rewrite.
+  if (xOnly) { const en = stray(c, text); if (en.length >= 3) warn('language', `中文里夹了这些英文普通词：${en.slice(0, 10).join('、')}。换成中文说法；产品名、工具名、代码保留原样`); return warnings; }
 
   // 3) Coverage: the article's specifics (numbers it states, names it repeats) are what a reader saves the cards for.
   const cov = coverage(c, text);
@@ -216,4 +222,53 @@ export function sourceChecks(c, text, { brand = {} } = {}) {
     warn('figures', `原文有 ${imgs.length} 张配图，改写稿一张都没用：截图、图解、产品界面这类配图，挑 1–3 张用 {"type": "image", "src": "<article.md 里的图片地址>", "caption": "…"} 放进讲同一件事的节（卡片上会优先显示原文配图）。先看图再选：有的文章图下面有一行「图：…」说明；没有说明就把图下载到工作目录（curl -sL "<地址>" -o assets/1.jpg）打开看。X 长文的配图常排在它所属章节的标题前面（上一章的末尾），按图的内容而不是位置判断它属于哪一节。只放你确定讲的是同一件事的图：放错节比不放更糟（卡片会优先显示它），拿不准就一张都不放，在交付里说明。纯装饰的头图不用`);
   }
   return warnings;
+}
+
+// ---------- X version: original excerpts are the article's own words ----------
+// A block marked 原文 may cut (whole sentences, or inside one with "……"), never change a character. Compared without
+// whitespace and Markdown markup, so line breaks, list markers and bold in article.md don't matter.
+const ELLIPSIS = /……|…|\.\.\./;
+export const verbatimKey = (s) => String(s ?? '')
+  .replace(/^---\n[\s\S]*?\n---\n/, '')
+  .replace(/<!--[\s\S]*?-->/g, '')
+  .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+  .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+  .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+[.)])\s+/gm, '')
+  .replace(/\*\*|__|`/g, '')
+  .replace(/\s+/g, '');
+
+/** Where a quote stops matching the article: the longest prefix found, and the text after it. */
+function mismatch(piece, hay) {
+  let lo = 0, hi = piece.length;
+  while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (hay.includes(piece.slice(0, mid))) lo = mid; else hi = mid - 1; }
+  return { ok: piece.slice(0, lo), bad: piece.slice(lo, lo + 14) };
+}
+
+/**
+ * Every x.blocks quote (and code block) checked against the article. Returns { errors, warnings } as strings
+ * "where: message". Quotes are errors (a reader takes them as the author's words); code is a warning.
+ */
+export function xVerbatimChecks(c, text) {
+  const errors = [], warnings = [];
+  const hay = verbatimKey(text);
+  (c.x?.blocks || []).forEach((b, i) => {
+    if (!b || typeof b !== 'object') return;
+    const paras = 'quote' in b ? (Array.isArray(b.quote) ? b.quote : [b.quote]) : 'code' in b ? [b.code] : [];
+    paras.forEach((p, j) => {
+      if (typeof p !== 'string') return;
+      const where = `x.blocks[${i}].${'quote' in b ? `quote${Array.isArray(b.quote) ? `[${j}]` : ''}` : 'code'}`;
+      let from = 0;
+      for (const raw of plain(p).split(ELLIPSIS)) {
+        const piece = verbatimKey(raw);
+        if (!piece) continue;
+        const at = hay.indexOf(piece, from);
+        if (at >= 0) { from = at + piece.length; continue; }
+        const m = mismatch(piece, hay);
+        if ('code' in b) warnings.push(`${where}: 命令和提示词要照抄原文，这段在原文里找不到${m.ok ? `（从「${m.ok.slice(-10)}」之后对不上）` : ''}`);
+        else errors.push(`${where}: 标了「原文」，但原文里找不到${m.ok ? `：「${m.ok.slice(-12)}」之后是「${m.bad}」，原文不是这样写的` : `「${piece.slice(0, 14)}」`}。原文节选只能删句、用「……」省略，不能改字；要改写就换成 text 或 note`);
+        break;
+      }
+    });
+  });
+  return { errors, warnings };
 }

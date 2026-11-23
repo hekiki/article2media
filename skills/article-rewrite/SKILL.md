@@ -46,9 +46,11 @@ version: "2.4.0"
 ```bash
 node ${CLAUDE_SKILL_DIR}/scripts/check.mjs <目录>/content.json                 # 长图
 node ${CLAUDE_SKILL_DIR}/scripts/check.mjs <目录>/content.json --ratio 3:4     # 还要出卡片时，同时检查卡片
+node ${CLAUDE_SKILL_DIR}/scripts/check.mjs <目录>/content.json --x             # 要发 X 时，检查 X 稿（content.json 里的 x）
 ```
 - 要出卡片时，再读 `../image-cards/references/xhs-guide.md`，写上 `cover`、`xhs`，需要时给个别节加 `card` 提示。
 - 要出公众号总结时，再读 `../wechat-layout/references/wechat-guide.md`，写上 `wechat.title`、`wechat.digest`。
+- 要发 X 时，按 content-schema.md 的「X 版」另写一份以文字为主的 X 稿 `x`：先判断内容类型（故事 / 教程 / 清单 / 报告 / 新闻），再按类型写；标「原文」的段落只删不改，脚本会和 article.md 逐字核对。只发 X 时可以不写 pages。
 - ✗ 必须修完。⚠ 提示**逐条处理到 0** 再出图：长度提示缩短文字；"数字在原文里找不到"改成原文数字或在 note 里注明；"第一人称"改成第三人称；"数据面板偏少""整页卡偏少""原文配图一张没用"按提示补上。只有确认提示不适用时才保留，并在交付时说明原因。
 - 校验会和同目录的 `article.md` 比对（数字来源、人称、配图），所以 content.json 要和 article.md 放在一起。
 - 改 content.json 用编辑工具或 `node` / `python` 脚本，不要用 `sed -i`：macOS 和 Linux 的写法不同，改不上也不报错。

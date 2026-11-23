@@ -89,7 +89,7 @@ const tiles = [
   ['原文全文', '一字不改 · 逐块校验', first('full', /^full(-01)?\.png$/)],
   ['白板论证', '推理主干 · 原文有去向', first('whiteboard', /^whiteboard(-01)?\.png$/)],
   ['漫画', '角色一致 · 文字 HTML', first('comic', /^card-01\.png$/)],
-  ['12 套主推主题', '内容不变 · 一键换风格', path.join(ROOT, 'docs', 'themes.jpg'), 'left'],
+  ['13 套主推主题', '内容不变 · 一键换风格', path.join(ROOT, 'docs', 'themes.jpg'), 'left'],
 ].filter((t) => t[2] && fs.existsSync(t[2]));
 
 const html = `<!doctype html><meta charset="utf-8"><style>

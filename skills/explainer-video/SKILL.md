@@ -23,7 +23,7 @@ version: "2.4.0"
 1. `node ${CLAUDE_SKILL_DIR}/scripts/video.mjs doctor` 看本机能力（配音、对齐、插画、ffmpeg），按 `references/video-guide.md` 第 1 节决定要不要问用户（通常不用问）。
 2. **完整读一遍**文章，再读 `references/video-guide.md`，写 `<目录>/video/video.json`：定调（受众、核心、开场策略）→ 封面 → 每镜口播和画面 → 选音色、选主题（按 `../article2media/references/styles.md`）。首句 ≤ 19 字、5 秒内说完；解说最忌急，说不完就删字，不加快语速。用户手里有原视频或音乐文件时，可以在镜头里放片段（`clip`）、垫背景音乐（`music`）、换转场（`transition`），见指南 2.7；都只用本地文件，不下载、不生成。
 3. `video.mjs check` 修完提示，再 `video.mjs make`（配音、可选插画、渲染、混音、审片一步完成；配音按句缓存，改口播只重配改动的句子）。
-4. 按指南第 4 节审片：看 `contact-sheet.jpg` 和检查项，改 `video.json` 重渲，最多 2 轮。
+4. 按指南第 4 节审片：看 `contact-sheet.jpg` 和检查项，改 `video.json` 重渲；通常 1–2 轮，检查项还有 ✗ 就继续改。
 5. 按指南第 5 节交付：视频、封面、镜头大纲、音色（公开 / 本机个人）、缺了哪些能力、发布前的 AI 声明提醒。
 
 音色：默认用随包公开音色（`video.mjs voices` 查看）。克隆自他人或平台的音色只能进本机个人音色库，不能放进 skill 的公开音色目录；用了本机个人音色时，提醒公开发布前确认授权。

@@ -1,0 +1,232 @@
+/* dusk | 暮色：腮红米底、深茄紫色块、莓红强调与蜜桃色大数字、粗宋标题配黑体正文，封面和整页卡上深下浅，像一本温柔又有分量的故事杂志；适合给普通读者的解读与建议：一个新模型、新产品或新功能怎么看、值不值得、要不要换 */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700;900&family=Noto+Sans+SC:wght@400;500;700;900&display=block');
+:root {
+  --font-head: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', serif;
+  --font-body: 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-label: 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  --font-num: 'Noto Serif SC', 'Songti SC', serif;
+  --bg: #FBEEE6;
+  --ink: #2E2236;
+  --ink-strong: #291B32;
+  --muted: #76687A;
+  --rule: #D7C6C6;
+  --rule-soft: #E9DAD6;
+  --fig-bg: #FFFAF4;
+  --card: #FFFAF4;
+  --on-acc: #FFF7F0;
+  --radius: 0px;
+  --radius-sm: 0px;
+  --panel-mix: 10%;
+  --w-title: 900;
+  --w-h2: 900;
+  --h2-ink: var(--ink-strong);
+  --sec-rule: 1px solid #D7C6C6;
+  --card-shadow: none;
+  --guard-bg: #291B32;
+  --guard-ink: #F7ECE2;
+  --guard-muted: #B9A9BC;
+  --guard-x: #FCC2B2;
+  /* One family of berry tones; the plum blocks and peach figures carry the rest. */
+  --accent-1: #9A4153;
+  --accent-2: #6E4A7E;
+  --accent-3: #A8505F;
+  /* Theme palette: plum blocks, peach on plum, lilac panels, cream sheets. */
+  --dk: #291B32;
+  --dk-ink: #F7ECE2;
+  --dk-muted: #B9A9BC;
+  --dk-rule: rgba(247, 236, 226, .2);
+  --peach: #FCC2B2;
+  --lilac: #EFDFE9;
+  --cream: #FBEEE6;
+}
+/* Panels are lilac whatever the section accent (the original's label bands and callouts). */
+.page, .card, .acc { --panel-bg: var(--lilac); }
+
+/* Running header: serif series name, bold page number, a thin rule under it */
+.c-top { font-size: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--rule); letter-spacing: .06em; }
+.c-top > span:first-child:not(.b-chip), .pg-top > span:first-child { font-family: var(--font-head); font-weight: 700; color: var(--ink-strong); letter-spacing: .12em; }
+.c-top > span:last-child, .pg-top > span:last-child { font-weight: 700; color: var(--ink-strong); letter-spacing: .1em; }
+
+/* Labels: small bold letter-spaced berry, no chip */
+.sec-label, .card .sec-label { background: transparent; padding: 0; border-radius: 0; color: var(--acc-text); font-family: var(--font-label); font-weight: 700; letter-spacing: .14em; }
+.card .sec-label { font-size: 12.5px; }
+.cv-kicker { font-family: var(--font-label); font-weight: 700; letter-spacing: .14em; }
+.fig-id { color: var(--acc-text); font-weight: 700; letter-spacing: .1em; }
+.p-title { color: var(--acc-text); letter-spacing: .12em; }
+
+/* Body: emphasis is berry and bold */
+.c-text b, .c-bullets b, .sec-text b, .sec-bullets b, .cv-sub b, .pg-intro b, .dg-p b, .op-sub b, .qa-a b, .p-card b, .p-table b, .cl-intro b { color: var(--acc-text); }
+.c-bullets li::before, .sec-bullets li::before { border-radius: 0; width: 6px; height: 2px; top: .86em; background: var(--acc); }
+
+/* Key line: a plum block with peach emphasis (the original's dark callout) */
+.c-take, .sec-take { background: var(--dk); color: var(--dk-ink); border: 0; border-radius: 0; font-weight: 500; }
+.c-take { padding: 13px 18px; }
+.sec-take { display: block; padding: 14px 20px; }
+.c-take b, .sec-take b { color: var(--peach); }
+.card.roomy .c-take { padding: 16px 20px; }
+
+/* Figures and boxes */
+.box { border-width: 1px; }
+.p-card, .p-quote .q { border: 0; }
+.c-stage { background: var(--card); border-left: 3px solid var(--acc); box-shadow: none; }
+.c-guard, .cl-guard { box-shadow: none; }
+.cl-card { border-top-width: 3px; box-shadow: none; }
+.cl-done { background: var(--lilac); }
+.end-h b { color: var(--acc-text); }
+.end-cta { background: var(--dk); color: var(--peach); letter-spacing: .12em; }
+.end-brand { box-shadow: none; }
+.qa-q { background: var(--dk); color: var(--dk-ink); border-radius: 0; }
+.qa-q b { color: var(--peach); }
+.qa-a { background: var(--card); border-radius: 0; }
+.dg-sec { border-left-width: 2px; }
+.b-chip em { border-radius: 0; }
+
+/* ---------- Plum cards: covers (except versus), full-card quotes and numbers ---------- */
+.c-cover:not(.cv-versus), .card.c-quote, .card.c-number {
+  background: var(--dk); color: var(--dk-ink);
+  --ink: #F7ECE2; --ink-strong: #FFF6EE; --muted: #B9A9BC; --rule: rgba(247, 236, 226, .2); --rule-soft: rgba(247, 236, 226, .12);
+  --title-ink: #F7ECE2; --h2-card-ink: #F7ECE2; --acc-text: var(--peach); --acc-line: var(--peach); --card: #36263F; --on-acc: var(--dk);
+}
+.c-cover:not(.cv-versus) .b-chip em, .card.c-quote .b-chip em, .card.c-number .b-chip em { background: var(--peach); color: var(--dk); }
+.card.c-quote .b-chip b { color: var(--dk-ink); }
+
+/* The light sheet at the bottom of a plum card (cover subtitle, contents, a number card's text) */
+.cv-hook .cv-band,
+.c-cover:not(.cv-hook):not(.cv-versus):not(.cv-contents) > .c-body > .cv-sub,
+.cv-contents .cv-toc,
+.card.c-number .c-text {
+  --ink: #2E2236; --ink-strong: #291B32; --muted: #76687A; --rule: #D7C6C6; --rule-soft: #E9DAD6; --acc-text: var(--acc); --card: #FFFAF4;
+  background: var(--cream); color: var(--ink);
+}
+/* The body spans the card so a sheet can run to both edges */
+.c-cover:not(.cv-versus) .c-body, .card.c-number .c-body { margin: 0 -30px; padding-left: 30px; padding-right: 30px; }
+
+/* Cover decoration: two overlapping glass discs with a soft peach rim (the original's glowing lenses) */
+.cv-deco { right: -70px; top: -30px; width: 330px; height: 300px; }
+.cv-deco i:nth-child(1), .cv-deco i:nth-child(2) {
+  border-radius: 50%; opacity: 1; border: 1.5px solid rgba(252, 194, 178, .55);
+  background: radial-gradient(circle at 38% 34%, rgba(252, 194, 178, .2), rgba(230, 120, 150, .07) 62%, rgba(230, 120, 150, 0) 74%);
+  box-shadow: 0 0 26px rgba(240, 128, 150, .28), inset 0 0 22px rgba(252, 194, 178, .14);
+}
+.cv-deco i:nth-child(1) { inset: auto; left: 0; top: 40px; width: 210px; height: 210px; }
+.cv-deco i:nth-child(2) { inset: auto; left: 100px; top: 0; width: 230px; height: 230px; }
+.cv-deco i:nth-child(3) { display: none; }
+.cv-hook .cv-deco { top: 33%; right: -90px; }
+.cv-versus .cv-deco { display: none; }
+.c-onepage .cv-deco i:nth-child(1), .c-onepage .cv-deco i:nth-child(2) { border-color: rgba(154, 65, 83, .28); box-shadow: none; background: radial-gradient(circle at 38% 34%, rgba(154, 65, 83, .07), rgba(154, 65, 83, 0) 72%); }
+.wx-cover.wide .cv-deco { right: -40px; top: 50%; width: 520px; height: 470px; }
+.wx-cover.wide .cv-deco i:nth-child(1) { top: 70px; width: 330px; height: 330px; }
+.wx-cover.wide .cv-deco i:nth-child(2) { left: 170px; width: 350px; height: 350px; }
+
+.c-cover:not(.cv-versus) .cv-kicker { color: var(--peach); }
+.c-cover:not(.cv-versus) .cv-title b { color: var(--peach); }
+.c-cover:not(.cv-versus) .cv-rule { width: 56px; height: 3px; background: var(--peach); }
+.c-cover .cv-sub { font-size: 17px; }
+
+/* hook: plum headline, the subtitle and points on the cream sheet with a short berry rule */
+.cv-hook .cv-rule { display: none; }
+.cv-hook .cv-band { margin: auto -30px 0; padding: 22px 30px 10px; }
+.cv-hook .cv-band::before { content: ""; display: block; width: 56px; height: 4px; background: var(--acc); margin-bottom: 16px; }
+.cv-hook .cv-band .cv-sub { color: var(--ink); font-weight: 400; }
+.cv-hook .cv-band .cv-sub b { color: var(--acc); }
+.cv-chips span { border: 0; border-radius: 0; background: var(--lilac); color: var(--acc); padding: 3px 11px; font-weight: 700; letter-spacing: .04em; }
+.cv-hook .c-foot { background: transparent; color: var(--muted); }
+.cv-hook:has(.cv-band) .c-foot { background: var(--cream); color: #76687A; }
+.cv-hook .c-foot span { opacity: 1; }
+
+/* number, quote, image, contents: the subtitle (or contents) becomes the sheet and runs into the footer */
+.c-cover:not(.cv-hook):not(.cv-versus):not(.cv-contents) > .c-body > .cv-sub { margin: auto -30px 0; padding: 22px 30px 8px; }
+.c-cover:not(.cv-hook):not(.cv-versus):not(.cv-contents) > .c-body > .cv-sub::before { content: ""; display: block; width: 56px; height: 4px; background: var(--acc); margin-bottom: 14px; }
+.c-cover:not(.cv-hook):not(.cv-versus):not(.cv-contents):has(> .c-body > .cv-sub:not([hidden])),
+.cv-contents:has(.cv-toc:not([hidden])) { padding-bottom: 0; }
+.c-cover:not(.cv-hook):not(.cv-versus):not(.cv-contents):has(> .c-body > .cv-sub:not([hidden])) .c-foot,
+.cv-contents:has(.cv-toc:not([hidden])) .c-foot { margin: 0 -30px; padding: 12px 30px 20px; background: var(--cream); color: #76687A; }
+.cv-number .cv-rule, .cv-quote .cv-rule { display: none; }
+.cv-num b { color: var(--peach); }
+.cv-num span { color: var(--dk-ink); }
+.cv-qmark { color: var(--peach); }
+.cv-by { color: var(--dk-muted); }
+/* image: headline above the picture, as in the original's first card */
+.cv-image .cv-kicker { order: 0; }
+.cv-image .cv-title { order: 1; margin-top: 12px; }
+.cv-image .c-body > .cv-ill { order: 2; margin: 18px -30px 0; }
+.cv-image .c-body > .cv-sub { order: 3; }
+.cv-image .cv-ill img { border-radius: 0; }
+/* contents: the list sits on the sheet */
+.cv-contents .cv-toc { margin: auto -30px 0; padding: 16px 30px 6px; border-radius: 0; box-shadow: none; }
+.cv-contents .cv-toc-h { color: var(--acc); letter-spacing: .14em; }
+.cv-contents .cv-toc li i { color: var(--acc); }
+.cv-contents .cv-sub { margin-bottom: 20px; color: #E9DCD9; }
+.cv-contents .cv-sub b { color: var(--peach); }
+
+/* versus: light, like the original's price card — ivory left, plum right */
+.cv-vs-col { border-radius: 0; }
+.cv-vs-col small { color: var(--acc); letter-spacing: .1em; }
+.cv-vs-col.no { background: var(--card); border: 0; color: var(--ink); }
+.cv-vs-col.no .cv-vs-val b { color: var(--acc); }
+.cv-vs-col.yes { background: var(--dk); color: var(--dk-ink); }
+.cv-vs-col.yes small, .cv-vs-col.yes .cv-vs-val b { color: var(--peach); }
+.cv-vs-mid { background: var(--acc); color: var(--on-acc); }
+
+/* ---------- Full-card variants ---------- */
+.card.c-quote .c-top, .card.c-quote .c-foot { color: var(--dk-muted); opacity: 1; }
+.card.c-quote .sec-label { border: 0; padding: 0; color: var(--peach); }
+.card.c-quote .cq-mark { color: var(--peach); opacity: .9; }
+.card.c-quote .cq-text { color: var(--dk-ink); }
+.card.c-quote .cq-text b { color: var(--peach); text-decoration-color: rgba(252, 194, 178, .55); }
+.card.c-quote .cq-from { color: var(--peach); opacity: .85; }
+
+/* number: plum top with the peach figure, the text on a cream sheet under it */
+.card.c-number .c-body { gap: 0; }
+.card.c-number .sec-h { margin-top: 10px; font-size: 30px; }
+.card.c-number .cn-num b { color: var(--peach); }
+.card.c-number .cn-num span, .card.c-number .cn-num-label { color: var(--dk-ink); }
+.card.c-number .c-text { margin: 0 -30px; padding: 22px 30px 6px; }
+.card.c-number .c-take { margin: 0 -30px; border: solid var(--cream); border-width: 14px 30px 0; }
+.card.c-number .cn + .c-take { border-top-width: 22px; }
+.card.c-number:has(.c-text:not([hidden]), .c-take) { padding-bottom: 0; }
+.card.c-number:has(.c-text:not([hidden]), .c-take) .c-foot { margin: 0 -30px; padding: 12px 30px 20px; background: var(--cream); color: #76687A; }
+
+/* image: the picture runs to the card edges; without a caption the key line overlaps its foot */
+.card.c-image .c-body { margin: 0 -30px; padding-left: 30px; padding-right: 30px; }
+.card.c-image .c-pic { margin: 0 -30px; }
+.card.c-image .c-pic img { border-radius: 0; }
+.card.c-image .c-pic .c-cap { padding: 0 30px; }
+.card.c-image .c-pic:not(:has(figcaption)) + .c-take { position: relative; z-index: 1; margin: -58px 12px 0; }
+
+/* ---------- Long pages: a plum header block, then cream sections ---------- */
+.page { --dk-px: 64px; --dk-pt: 44px; }
+.page.m { --dk-px: 30px; --dk-pt: 30px; }
+.page.m.xt { --dk-pt: 28px; }
+.page > :is(.pg-top, .pg-title, .pg-part, .pg-intro, .xt-intro, .pg-head) {
+  margin-left: calc(-1 * var(--dk-px)); margin-right: calc(-1 * var(--dk-px));
+  padding-left: var(--dk-px); padding-right: var(--dk-px);
+  background: var(--dk); color: var(--dk-ink);
+  --ink: #F7ECE2; --ink-strong: #FFF6EE; --muted: #B9A9BC; --title-ink: #F7ECE2; --acc-text: var(--peach);
+}
+.page > .pg-top { margin-top: calc(-1 * var(--dk-pt)); padding-top: var(--dk-pt); padding-bottom: 11px; border-bottom: 1px solid var(--dk-rule); background-clip: border-box; }
+.page > .pg-title, .page > .pg-head { margin-top: 0; padding-top: 28px; }
+.m > .pg-title, .m > .pg-head { padding-top: 22px; }
+.page > .pg-title:not(:has(+ .pg-part, + .pg-intro, + .xt-intro)) { padding-bottom: 28px; }
+.page > .pg-part { margin-top: 0; padding-top: 10px; color: var(--peach); font-family: var(--font-label); font-size: 14px; letter-spacing: .14em; }
+.page > :is(.pg-title, .pg-part, .pg-intro, .pg-head, .xt-intro) + :is(.sec, .xt-sec) { border-top: 0; }
+.pg-head .pg-part { color: var(--peach); font-family: var(--font-label); font-size: 14px; letter-spacing: .14em; }
+.page > .pg-part:not(:has(+ .pg-intro)) { padding-bottom: 26px; }
+.page > .pg-intro { margin-top: 0; padding-top: 10px; }
+.page > .xt-intro { margin-top: 0; padding-top: 12px; border-bottom: 0; color: #E3D4D3; }
+.page > .pg-head { padding-bottom: 24px; }
+.pg-head .pg-intro { padding-bottom: 0; }
+.pg-title b { color: var(--peach); }
+.pg-intro { color: #E9DCD9; }
+.pg-intro b { color: var(--peach); }
+.pg-hero img { border-radius: 0; }
+.sec-h { letter-spacing: .01em; }
+.m .sec-take { font-weight: 500; }
+.fig-card { border-radius: 0; }
+.pg-closing { background: var(--dk); color: var(--dk-ink); border: 0; padding: 26px 40px; }
+.m .pg-closing { padding: 22px 22px; }
+.pg-closing b { color: var(--peach); }
+.pg-brand-name { color: var(--ink-strong); }
+.xt-sec + .xt-sec { border-top-color: var(--rule); }
+.xt-note { box-shadow: none; background: var(--lilac); }
+.xt-chip { background: var(--dk); color: var(--peach); }

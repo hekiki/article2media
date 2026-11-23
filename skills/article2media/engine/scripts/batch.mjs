@@ -33,7 +33,7 @@ const USAGE = [
   `      node ${CLI} skip <批次> <序号…> [--reason 原因]  这一条不做了`,
   `      node ${CLI} checklist <批次 | 工作目录>         写发布清单 publish.md`,
   '',
-  '--spec 用逗号分隔：cards[:3:4|4:5|1:1|9:16] 总结卡片、long 总结长图、x X 长图（发 X 用）、wechat 公众号排版（原文）、wechat-rewrite 公众号总结、',
+  '--spec 用逗号分隔：cards[:3:4|4:5|1:1|9:16] 总结卡片、long 总结长图、x X 版（发 X 用，以文字为主）、x-full X 完整版、wechat 公众号排版（原文）、wechat-rewrite 公众号总结、',
   '       full 原文长图、full-cards[:比例] 原文卡片、video 口播视频、whiteboard 白板、comic 漫画。默认 long。',
   '--theme 整批固定一个主题；不传时每篇按内容选。--root 输出根目录（默认 ./article2media-out）。',
   'links.txt 每行一个链接或本地文件，# 开头的行是注释。已抓过的链接（同一个目录里有 article.md）会跳过，--refetch 重抓。',
@@ -44,6 +44,7 @@ const SPEC = {
   cards: { form: 'cards', ratio: true, rewrite: true, themed: true, skill: 'image-cards', script: 'cards' },
   long: { form: 'long', rewrite: true, themed: true, skill: 'long-image', script: 'long' },
   x: { form: 'long-x', rewrite: true, themed: true, skill: 'long-image', script: 'long', args: ' --x' },
+  'x-full': { form: 'long-x-full', rewrite: true, themed: true, skill: 'long-image', script: 'long', args: ' --x full' },
   wechat: { form: 'wechat', themed: true, skill: 'wechat-layout', script: 'wechat' },
   'wechat-rewrite': { form: 'wechat', rewrite: true, themed: true, skill: 'wechat-layout', script: 'wechat' },
   full: { form: 'long-original', skill: 'long-image', script: 'long' },
@@ -52,7 +53,7 @@ const SPEC = {
   whiteboard: { form: 'whiteboard', model: true, skill: 'logic-whiteboard' },
   comic: { form: 'comic', model: true, skill: 'article-comic' },
 };
-const SPEC_ZH = { cards: '总结卡片', long: '总结长图', x: 'X 长图', wechat: '公众号排版', 'wechat-rewrite': '公众号总结', full: '原文长图', 'full-cards': '原文卡片', video: '口播视频', whiteboard: '白板', comic: '漫画' };
+const SPEC_ZH = { cards: '总结卡片', long: '总结长图', x: 'X 版', 'x-full': 'X 完整版', wechat: '公众号排版', 'wechat-rewrite': '公众号总结', full: '原文长图', 'full-cards': '原文卡片', video: '口播视频', whiteboard: '白板', comic: '漫画' };
 const RATIOS = ['3:4', '4:5', '1:1', '9:16'];
 const SHORT_CHARS = 500; // below this an "article" is probably a teaser, a paywall stub or a media post
 const PAYWALL = /(subscribe to (continue|read|unlock)|sign in to (continue|read)|for (paid|paying) subscribers|登录后(查看|阅读|继续)|付费(阅读|内容|解锁)|开通会员|试读结束|剩余\s*\d+\s*%)/i;
@@ -182,7 +183,7 @@ function refresh(queue) {
       it.problems.push(...it.flags);
     } else if (needsRewrite && !st.rewritten) {
       it.state = 'todo';
-      step('改写', hasContent ? 'content.json 读不了或没有 pages：修好它' : `用 article-rewrite 把 article.md 改写成 content.json（${theme ? `主题固定 ${theme}` : '主题按 styles.md 选'}${forms.some((f) => f.key === 'cards') ? '；写 cover、xhs 和 publish.titles.xhs' : ''}${forms.some((f) => /^wechat/.test(f.key)) ? '；写 wechat 和 publish.titles.wechat' : ''}${forms.some((f) => f.key === 'x') ? '；写 publish.titles.x' : ''}）`);
+      step('改写', hasContent ? 'content.json 读不了或没有 pages：修好它' : `用 article-rewrite 把 article.md 改写成 content.json（${theme ? `主题固定 ${theme}` : '主题按 styles.md 选'}${forms.some((f) => f.key === 'cards') ? '；写 cover、xhs 和 publish.titles.xhs' : ''}${forms.some((f) => /^wechat/.test(f.key)) ? '；写 wechat 和 publish.titles.wechat' : ''}${forms.some((f) => f.key === 'x') ? '；写 x（X 版文字稿：先判断内容类型，见 content-schema.md「X 版」）和 publish.titles.x' : ''}）`);
     } else {
       const f = forms.find((x) => st.rendered[x.id] !== 'done');
       if (!f) it.state = st.published ? 'published' : 'ready';
@@ -194,6 +195,7 @@ function refresh(queue) {
         const article = fs.existsSync(path.join(dir, 'article.zh.md')) ? 'article.zh.md' : 'article.md';
         if (o?.errors) step(`修 ${f.id}`, `${o.name} 的检查有 ${o.errors} 个错误（${path.join(o.path, o.qa || 'qa.json')}）：按提示改内容后重新渲染`);
         else if (def.model) step(f.id, `按 ${def.skill} 的 SKILL.md 做${zh}（输入 ${path.join(dir, article)}${theme && def.themed ? `，主题 ${theme}` : ''}）`);
+        else if (f.key === 'x' && !content?.x) step(f.id, `content.json 还没有 x：按 article-rewrite 的 content-schema.md「X 版」先判断内容类型，写以文字为主的 X 稿，再渲染`);
         else if (def.rewrite && f.key !== 'wechat-rewrite') step(f.id, `渲染${zh}`, `node ${q(wrapper(def.skill, def.script))} ${q(path.join(dir, 'content.json'))}${def.args || ''}${f.ratio ? ` --ratio ${f.ratio}` : ''}${themeArg}`);
         else if (f.key === 'wechat-rewrite') step(f.id, '导出改写稿为 rewrite.md，再排公众号', `node ${q(wrapper('article-rewrite', 'export'))} ${q(path.join(dir, 'content.json'))}${themeArg} && node ${q(wrapper('wechat-layout', 'wechat'))} ${q(path.join(dir, 'rewrite.md'))}${themeArg}`);
         else if (it.foreign && article === 'article.md') step(f.id, `原文是外文：先用 article-translate 译成 article.zh.md，再出${zh}`);

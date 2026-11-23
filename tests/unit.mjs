@@ -62,6 +62,31 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   check('分帖：小页并进一帖，帖数最少且更均匀（4 / 3 / 1+1，不是 4 / 3+1 / 1）', eq(groupPosts([{ page: 1, n: 4 }, { page: 2, n: 3 }, { page: 3, n: 1 }, { page: 4, n: 1 }], 4).map((p) => p.map((x) => `${x.page}-${x.k}`)), [['1-1', '1-2', '1-3', '1-4'], ['2-1', '2-2', '2-3'], ['3-1', '4-1']]));
   check('分帖：一页 6 张拆成 3 + 3；1+1+1 并成一帖', eq(sizes(groupPosts([{ page: 1, n: 6 }], 4)), [3, 3]) && eq(sizes(groupPosts([{ page: 1, n: 1 }, { page: 2, n: 1 }, { page: 3, n: 1 }], 4)), [3]));
   check('文件名：x-01-2.png ↔ 第 1 页第 2 张', stripName(1, 2) === 'x-01-2.png' && eq(parseStripName('x-01-2.png'), { page: 1, k: 2 }) && parseStripName('page-01.png') === null);
+  // X version (text first): strips about a phone screen tall (≤ 2.6 × the width); a forced cut ([data-x-break]) still
+  // ends a picture whatever the heights, and sections are whole blocks.
+  const { X_TEXT } = await import(pathToFileURL(path.join(LIB, 'x-strips.mjs')).href);
+  const capPx = Math.round(1080 * X_TEXT.capRatio) + 1;
+  const bc = [{ y: 500, gap: 30, level: 3, forced: true }, ...[1100, 1700, 2300, 2900, 3500].map((y) => ({ y, gap: 30, level: 3 }))];
+  s = planStrips(4000, bc, X_TEXT);
+  check('X 版：强制切口处单独成一张，其余按节切，每张 ≤ 宽的 2.6 倍', s[0].y0 === 0 && s[0].y1 === 500 && s[1].y0 === 500 && s.at(-1).y1 === 4000
+    && s.every((x) => x.px <= capPx) && s.slice(1).every((x) => [1100, 1700, 2300, 2900, 3500, 4000].includes(x.y1)), JSON.stringify(s));
+  check('X 版：强制切口两边各补边距（18 − 缝的一半 = 3）', s[0].padBot === 3 && s[1].padTop === 3, JSON.stringify(s.slice(0, 2)));
+  s = planStrips(3200, [{ y: 1100, gap: 30, level: 3 }, { y: 1500, gap: 0, level: 0, box: 'fig' }, { y: 2300, gap: 30, level: 3 }], X_TEXT);
+  check('竖条：最少张数只能切开图时，多切一张换来切口都在节之间', s.every((x) => x.level !== 0) && s.every((x) => x.px <= capPx), JSON.stringify(s));
+  const { oneLine, xBlockType, xSections, quoteParas, X_KINDS } = await import(pathToFileURL(path.join(LIB, 'layout-long.mjs')).href);
+  check('X 稿的块：每块恰好一种内容；五种内容类型', eq(xBlockType({ quote: 'a', who: 'b' }), ['quote']) && eq(xBlockType({ text: 'a', key: 'b' }), ['text', 'key'])
+    && eq(xBlockType('a'), []) && eq(Object.keys(X_KINDS), ['story', 'tutorial', 'list', 'report', 'news']));
+  check('X 稿分节：每个小标题开一节，开头没有小标题的也算一节；quote 可以是一段或几段',
+    eq(xSections([{ text: 'a' }, { h: 'b' }, { text: 'c' }, { h: 'd' }]).map((x) => x.length), [1, 2, 1]) && eq(quoteParas(['a', '', 'b']), ['a', 'b']) && eq(quoteParas('a'), ['a']));
+  const { xVerbatimChecks } = await import(pathToFileURL(path.join(LIB, 'source-check.mjs')).href);
+  const art = '---\ntitle: t\n---\n\n# 标题\n\n过去二十年，**最优质的资产**是长期低息负债。房子只是载体。\n\n- 第二段在列表里，也算原文。\n';
+  const vx = (blocks) => xVerbatimChecks({ x: { blocks } }, art);
+  check('原文节选：一字不差（不管换行、粗体、列表符号）、用「……」删句都通过',
+    vx([{ quote: '过去二十年，最优质的资产是长期低息负债。' }, { quote: ['过去二十年，……房子只是载体。', '第二段在列表里，也算原文。'] }]).errors.length === 0);
+  const bad = vx([{ quote: '过去二十年，最好的资产是长期低息负债。' }, { code: 'npm i nothing' }]);
+  check('原文节选：改了字 → 错误，指出从哪里开始对不上；代码对不上 → 提示', bad.errors.length === 1 && /x\.blocks\[0\]\.quote/.test(bad.errors[0]) && /过去二十年，最/.test(bad.errors[0])
+    && bad.warnings.length === 1 && /x\.blocks\[1\]\.code/.test(bad.warnings[0]), JSON.stringify(bad));
+  check('标题合成一行：中文之间去掉换行，英文单词之间留空格', oneLine('护照落在飞机上\n在马德里') === '护照落在飞机上在马德里' && oneLine('Claude\nCode 实战') === 'Claude Code 实战' && oneLine('**AI**\n智能体') === 'AI智能体');
 }
 
 // ---------- fonts ----------

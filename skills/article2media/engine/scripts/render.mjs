@@ -20,21 +20,29 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { spawnSync } from 'node:child_process';
 import { validate } from './lib/validate.mjs';
-import { buildPage } from './lib/layout-long.mjs';
+import { buildPage, buildX, X_KINDS } from './lib/layout-long.mjs';
 import { buildCards, buildCaption, ratioSpec, coverVariants, FORMS } from './lib/layout-card.mjs';
 import { resolveBrand, brandCss } from './lib/brand.mjs';
-import { findSource, sourceChecks } from './lib/source-check.mjs';
+import { findSource, sourceChecks, xVerbatimChecks } from './lib/source-check.mjs';
 import { resolveIllustrations, resolveImageFigures } from './lib/illustrations.mjs';
 import { qaInPage } from './lib/qa.mjs';
 import { launchBrowser } from './lib/chrome.mjs';
-import { X_STRIP, measureCuts, planStrips, groupPosts, stripName } from './lib/x-strips.mjs';
+import { X_STRIP, X_TEXT, measureCuts, planStrips, groupPosts, stripName, parseStripName } from './lib/x-strips.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const THEMES_DIR = path.join(ROOT, 'themes');
 const readCss = (name) => fs.readFileSync(path.join(ROOT, 'layouts', name), 'utf8');
 const COMPONENTS_CSS = readCss('components.css');
 
+// `--x` is the X version (text first, from content.json "x"); `--x full` (or --x=full) the full X version — every
+// phone page cut into strips.
+const argv = process.argv.slice(2);
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === '--x' && argv[i + 1] === 'full') argv.splice(i, 2, '--x-full');
+  else if (argv[i] === '--x=full') argv[i] = '--x-full';
+}
 const { values: opt, positionals } = parseArgs({
+  args: argv,
   allowPositionals: true,
   options: {
     layout: { type: 'string', short: 'l' },
@@ -48,6 +56,7 @@ const { values: opt, positionals } = parseArgs({
     'max-height': { type: 'string' },
     wide: { type: 'boolean', default: false },
     x: { type: 'boolean', default: false },
+    'x-full': { type: 'boolean', default: false },
     form: { type: 'string' },
     covers: { type: 'boolean', default: false },
     issue: { type: 'string' },
@@ -90,7 +99,7 @@ if (opt.list) {
 }
 const CLI = process.env.A2M_CLI || 'render.mjs';
 if (opt.help || !positionals[0]) {
-  console.error(`用法：node ${CLI} <content.json | article.md> [--ratio 3:4|4:5|1:1|9:16] [--wide] [--form quotes|onepage|qa|digest] [--covers] [--theme 名称|a,b|all] [--out 目录] [--check] [--list]`);
+  console.error(`用法：node ${CLI} <content.json | article.md> [--ratio 3:4|4:5|1:1|9:16] [--wide] [--x | --x full] [--form quotes|onepage|qa|digest] [--covers] [--theme 名称|a,b|all] [--out 目录] [--check] [--list]`);
   process.exit(opt.help ? 0 : 2);
 }
 
@@ -153,11 +162,17 @@ function loadBrand() {
 const brand = resolveBrand({ ...loadBrand(), ...(content.brand || {}) }, { issue: opt.issue ?? content.issue });
 
 // ---- validate ----
-const { errors, warnings, info } = validate(content, { layout, ratio: ratio || '3:4' });
+const { errors, warnings, info } = validate(content, { layout, ratio: ratio || '3:4', x: layout === 'long' && !!opt.x && !opt['x-full'] });
+const xDraft = layout === 'long' && !!opt.x && !opt['x-full'];
 // Compared with the article it was written from (article.md next to content.json): numbers, voice, pictures.
 const source = findSource(path.dirname(contentPath));
-if (source && Array.isArray(content.pages)) warnings.push(...sourceChecks(content, source.text, { brand }));
-for (const m of Array.isArray(content.pages) ? resolveImageFigures(content, path.dirname(contentPath)) : []) errors.push(`${m.where}：找不到图片文件 ${m.src}（本地图片的路径相对 content.json 所在目录）`);
+if (source && (Array.isArray(content.pages) || xDraft)) warnings.push(...sourceChecks(content, source.text, { brand, xOnly: !Array.isArray(content.pages) }));
+// The X version's excerpts are marked 原文: each must be in the article as written (cuts only).
+if (content.x?.blocks) {
+  if (source) { const v = xVerbatimChecks(content, source.text); errors.push(...v.errors); warnings.push(...v.warnings); }
+  else if (xDraft && content.x.blocks.some((b) => b && 'quote' in b)) warnings.push('x: 没找到同目录的 article.md，标「原文」的段落没法核对是否和原文一字不差');
+}
+for (const m of Array.isArray(content.pages) || content.x?.blocks ? resolveImageFigures(content, path.dirname(contentPath)) : []) errors.push(`${m.where}：找不到图片文件 ${m.src}（本地图片的路径相对 content.json 所在目录）`);
 if (warnings.length) {
   console.log(`⚠ 内容提示（${warnings.length}）：`);
   for (const w of warnings) console.log('  - ' + w);
@@ -168,9 +183,9 @@ if (errors.length) {
   if (opt.check) console.log(`\n内容检查：${errors.length} 个错误，${warnings.length} 个提示。`);
   process.exit(1);
 }
-const nSec = content.pages.reduce((a, p) => a + p.sections.length, 0);
-const layoutDesc = layout === 'card' ? (opt.covers ? '，只出封面的各个版本' : opt.form ? `，形态：${opt.form}` : `，将生成 ${info.cards === info.cardsMax ? info.cards : `${info.cards}–${info.cardsMax}`} 张 ${spec.name} 卡片${info.cards === info.cardsMax ? '' : '（清单分页出图时才定）'}`) : `，版式：${opt.wide || ['magazine', 'wide'].includes(opt.layout) ? '宽版杂志长图（1200）' : opt.x ? 'X 版长图（手机版切成 1080 宽、高不超过 4096 的竖条）' : '手机长图（1080 宽）'}`;
-console.log(`✓ content.json 校验通过：${content.pages.length} 页，${nSec} 节${layoutDesc}`);
+const nSec = (content.pages || []).reduce((a, p) => a + p.sections.length, 0);
+const layoutDesc = layout === 'card' ? (opt.covers ? '，只出封面的各个版本' : opt.form ? `，形态：${opt.form}` : `，将生成 ${info.cards === info.cardsMax ? info.cards : `${info.cards}–${info.cardsMax}`} 张 ${spec.name} 卡片${info.cards === info.cardsMax ? '' : '（清单分页出图时才定）'}`) : `，版式：${opt.wide || ['magazine', 'wide'].includes(opt.layout) ? '宽版杂志长图（1200）' : opt['x-full'] ? 'X 完整版（手机版每页切成 1080 宽、高不超过 4096 的竖条）' : opt.x ? `X 版（以文字为主，${X_KINDS[content.x?.kind]?.zh || ''}，约 ${info.xChars ?? 0} 字，排成一整条再切成 1080 宽、约一屏高的竖条）` : '手机长图（1080 宽）'}`;
+console.log(`✓ content.json 校验通过：${content.pages ? `${content.pages.length} 页，${nSec} 节` : '只有 X 稿'}${layoutDesc}`);
 if (opt.check) {
   if (warnings.length) console.log(`还有 ${warnings.length} 条提示：逐条处理到 0，再出图。`);
   else console.log(`脚本查不了、要你自己看一遍的：
@@ -209,16 +224,19 @@ const ext = format === 'jpeg' ? 'jpg' : 'png';
 const quality = Number(opt.quality);
 // Long pages: phone width (one column) unless --wide / --layout magazine asks for the 1200 px two-column page.
 const wide = opt.wide || ['magazine', 'wide'].includes(opt.layout);
-// X 版长图 (--x): the phone page cut into strips X keeps at full width (why and how: lib/x-strips.mjs).
-const xPage = layout === 'long' && !!opt.x && !wide;
-if (opt.x && !xPage) { console.error('[render] --x 只用于手机版总结长图（不和 --wide、--ratio 一起用）'); process.exit(2); }
+// X versions (why and how: lib/x-strips.mjs). --x: the text-first X draft as one column (buildX) cut into strips.
+// --x full: every phone page as it is, cut into strips.
+const xText = xDraft && !wide;
+const xPage = layout === 'long' && !!opt['x-full'] && !wide;
+if ((opt.x || opt['x-full']) && !xText && !xPage) { console.error('[render] --x 只用于手机版总结长图（不和 --wide、--ratio 一起用）'); process.exit(2); }
+if (xText && opt.page) { console.error('[render] X 版是一整条，不分页：--page 只用于 --x full'); process.exit(2); }
 const X_MB = 5;
 const longW = wide ? 1200 : 540;
-const maxHeight = Number(opt['max-height']) || (xPage ? 1e6 : layout === 'long' && !wide ? 7600 : 4400);
+const maxHeight = Number(opt['max-height']) || (xPage || xText ? 1e6 : layout === 'long' && !wide ? 7600 : 4400);
 const pageFilter = opt.page ? new Set(opt.page.split(',').map((n) => Number(n.trim()))) : null;
 const baseOut = path.resolve(opt.out || path.dirname(contentPath));
 const outDirFor = (theme) => {
-  const sub = layout === 'card' ? `${theme}-${spec.slug}${opt.covers ? '-covers' : form ? `-${form}` : ''}` : xPage ? `${theme}-x` : theme;
+  const sub = layout === 'card' ? `${theme}-${spec.slug}${opt.covers ? '-covers' : form ? `-${form}` : ''}` : xText ? `${theme}-x` : xPage ? `${theme}-x-full` : theme;
   return themes.length > 1 || !opt.out ? path.join(baseOut, sub) : baseOut;
 };
 
@@ -286,10 +304,10 @@ async function backgroundBand(page, pid, y, width, height) {
     await page.evaluate(() => { document.getElementById('x-band')?.remove(); for (const e of document.querySelectorAll('[data-xa]')) e.removeAttribute('data-xa'); });
   }
 }
-async function renderStrips(page, qa, pi, entry, outDir) {
-  const S = X_STRIP.scale, MB = X_MB * 1024 * 1024;
+async function renderStrips(page, qa, pi, entry, outDir, cfg = X_STRIP) {
+  const S = cfg.scale, MB = X_MB * 1024 * 1024;
   const { cands } = await page.evaluate(measureCuts);
-  const strips = planStrips(qa.height, cands);
+  const strips = planStrips(qa.height, cands, cfg);
   const out = [];
   for (let k = 0; k < strips.length; k++) {
     const s = strips[k];
@@ -326,13 +344,52 @@ async function renderStrips(page, qa, pi, entry, outDir) {
     const isPng = buf.readUInt32BE(0) === 0x89504e47;
     const w = isPng ? buf.readUInt32BE(16) : Math.round(qa.width * S);
     const h = isPng ? buf.readUInt32BE(20) : Math.round(clip.height * S);
-    if (h > X_STRIP.maxPx) e.issues.push({ level: 'error', where: '尺寸', msg: `高 ${h}px，超过 X 的 ${X_STRIP.maxPx}px：X 会把它压窄，字就糊了` });
+    if (h > cfg.maxPx) e.issues.push({ level: 'error', where: '尺寸', msg: `高 ${h}px，超过 X 的 ${cfg.maxPx}px：X 会把它压窄，字就糊了` });
     if (k < strips.length - 1 && s.level === 0) e.issues.push({ level: 'warn', where: '切口', msg: `底部从「${s.box}」中间切开（这一块比一张图还高，中间没有空隙）：把它拆短一些` });
     if (k < strips.length - 1 && s.level === -1) e.issues.push({ level: 'warn', where: '切口', msg: '底部是强行切开的，可能切到了文字：这一块太长，拆短一些' });
     Object.assign(e, { image: imgPath, size: `${w}×${h}`, kb: Math.round(buf.length / 1024) });
     out.push(e);
   }
+  // Remove this page's strips left by an earlier run that cut it into more pieces (or saved one as JPEG),
+  // so the folder and the posting order never offer an outdated strip.
+  const written = new Set(out.map((e) => path.basename(e.image)));
+  for (const f of fs.readdirSync(outDir)) {
+    const p = parseStripName(f);
+    if (p && p.page === pi + 1 && !written.has(f)) fs.rmSync(path.join(outDir, f));
+  }
   return out;
+}
+
+// X version: the X draft as one continuous page, cut like the full version but into strips about a phone screen tall.
+async function renderX(browser, theme, themeCss, nAcc, outDir, report) {
+  const layoutCss = [COMPONENTS_CSS, readCss('long.css'), readCss('long-mobile.css'), readCss('long-x.css')].join('\n');
+  const htmlPath = path.join(outDir, 'x.html');
+  fs.writeFileSync(htmlPath, buildX({ content, brand, themeCss, layoutCss, nAcc }));
+  const entry = { theme, label: 'X 版', html: htmlPath };
+  let entries = [entry];
+  if (browser) {
+    const page = await browser.newPage();
+    try {
+      await page.setViewport(X_TEXT.width, 1600, X_TEXT.scale);
+      await page.goto(pathToFileURL(htmlPath).href);
+      const fontStatus = await page.settle(25000);
+      await page.evaluate(() => { window.__xt?.(); window.__hug?.(); });
+      const qa = await page.evaluate(qaInPage, { maxHeight });
+      if (fontStatus === 'timeout') qa.issues.push({ level: 'warn', where: '字体', msg: '等待网络字体超时，部分文字可能使用了回退字体' });
+      entries = await renderStrips(page, qa, 0, entry, outDir, X_TEXT);
+      const figs = (content.x?.blocks || []).filter((b) => b && 'figure' in b).length;
+      entries[0].note = `以文字为主：约 ${info.xChars ?? 0} 字，${entries.length} 张${figs ? `，用了 ${figs} 个图表` : '，没有图表'}`;
+    } finally {
+      await page.close();
+    }
+    // This folder may hold an earlier run's strips (or the full version's, with its page-NN.html): only this run's stay.
+    const written = new Set(entries.map((e) => path.basename(e.image || '')));
+    for (const f of fs.readdirSync(outDir)) {
+      if ((parseStripName(f) && !written.has(f)) || (/^page-\d+\.html$/.test(f) && !fs.existsSync(path.join(outDir, f.replace(/\.html$/, '.png'))))) fs.rmSync(path.join(outDir, f));
+    }
+    entries.at(-1).posts = groupPosts([{ page: 1, n: entries.length }]).map((p, i) => `第 ${i + 1} 帖 ${p.length} 张：${p.map((s) => stripName(s.page, s.k).replace(/\.png$/, '')).join('、')}`);
+  }
+  report.push(...entries);
 }
 
 async function renderCards(browser, theme, themeCss, nAcc, outDir, report) {
@@ -413,6 +470,7 @@ try {
     const ill = resolveIllustrations(content, theme, path.dirname(contentPath));
     const before = report.length;
     if (layout === 'card') await renderCards(browser, theme, themeCss, nAcc, outDir, report);
+    else if (xText) await renderX(browser, theme, themeCss, nAcc, outDir, report);
     else await renderLong(browser, theme, themeCss, nAcc, outDir, report);
     const illIssues = [
       ...ill.missing.map((m) => ({ level: 'warn', where: m.where, msg: 'AI 插画还没生成，图里是占位框：先运行 article-rewrite 的 illustrate.mjs' })),
@@ -436,6 +494,7 @@ for (const r of report) {
   if (r.covers) console.log(`  封面：${r.covers}`);
   if (r.notes) console.log(`  发布信息：${r.notes}`);
   if (r.caption) console.log(`  文案：${r.caption}`);
+  if (r.note) console.log(`  ${r.note}`);
   if (r.posts) console.log(`  发帖分组（X 每帖最多 ${X_STRIP.perPost} 张，第 2 帖起回复自己接成线程）：\n${r.posts.map((p) => '    ' + p).join('\n')}`);
   for (const i of r.issues || []) {
     if (i.level === 'error') nErr++; else nWarn++;

@@ -133,7 +133,7 @@ const tmpContent = (patch) => {
     const rw = run([f, '--wide', '--out', path.join(OUT, 'd1w'), '--page', '1']);
     check('长图默认 1080 宽，--wide 为 2400 宽', rw.code === 0 && w(path.join(OUT, 'd1', 'page-01.png')) === 1080 && w(path.join(OUT, 'd1w', 'page-01.png')) === 2400, rw.out);
     const rl = run(['--list']);
-    check('--list 先列 12 套主推主题，再列经典主题', rl.code === 0 && (rl.out.split('经典主题')[0].match(/^[\w-]+ /gm) || []).length === 12 && /cloud/.test(rl.out.split('经典主题')[1] || ''), rl.out);
+    check('--list 先列 13 套主推主题，再列经典主题', rl.code === 0 && (rl.out.split('经典主题')[0].match(/^[\w-]+ /gm) || []).length === 13 && /cloud/.test(rl.out.split('经典主题')[1] || ''), rl.out);
     const rc = run([f, '--ratio', '3:4', '--theme', 'cloud', '--out', path.join(OUT, 'd1c'), '--page', '1']);
     check('经典主题仍可按名字渲染', rc.code === 0 && /版面检查：0 个错误/.test(rc.out), rc.out);
     // Cover variants, lighter forms, brand kit — all cut from the same content.json.
@@ -156,20 +156,87 @@ const tmpContent = (patch) => {
       rb = run([bc, '--ratio', '3:4', '--form', form, '--out', path.join(bd, form)]);
       check(`--form ${form}：出图、0 错误`, rb.code === 0 && /版面检查：0 个错误/.test(rb.out) && fs.existsSync(path.join(bd, form, `${stem}-01.png`)) && !fs.existsSync(path.join(bd, form, 'caption.md')), rb.out);
     }
-    // X 版长图: the phone page cut into 1080-wide strips X keeps as uploaded (≤ 4096 tall), PNG-8 (IHDR colour type 3) when ffmpeg is there.
-    rb = run([bc, '--x', '--out', path.join(bd, 'x')]);
+    // X 完整版 (--x full): the phone page cut into 1080-wide strips X keeps as uploaded (≤ 4096 tall), PNG-8 (IHDR colour type 3) when ffmpeg is there.
+    const pngInfo = (dir, x) => { const b = fs.readFileSync(path.join(dir, x)); return { x, w: b.readUInt32BE(16), h: b.readUInt32BE(20), type: b[25] }; };
+    rb = run([bc, '--x', 'full', '--out', path.join(bd, 'x')]);
     const xd = path.join(bd, 'x');
     const xs = fs.existsSync(xd) ? fs.readdirSync(xd).filter((x) => /^x-\d+-\d+\.png$/.test(x)) : [];
-    const ihdr = xs.map((x) => { const b = fs.readFileSync(path.join(xd, x)); return { x, w: b.readUInt32BE(16), h: b.readUInt32BE(20), type: b[25] }; });
+    const ihdr = xs.map((x) => pngInfo(xd, x));
     const ff = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0;
     const perPage = g.pages.map((_, i) => xs.filter((x) => x.startsWith(`x-${String(i + 1).padStart(2, '0')}-`)).length);
-    check('--x：每页切成 1080 宽、高 ≤ 4096 的竖条，PNG-8，0 错误、没有切口提示', rb.code === 0 && /版面检查：0 个错误/.test(rb.out) && !/切口/.test(rb.out) && perPage.every((n) => n >= 1)
+    check('--x full：每页切成 1080 宽、高 ≤ 4096 的竖条，PNG-8，0 错误、没有切口提示', rb.code === 0 && /版面检查：0 个错误/.test(rb.out) && !/切口/.test(rb.out) && perPage.every((n) => n >= 1)
       && ihdr.every((d) => d.w === 1080 && d.h <= 4096 && d.h >= 400 && (!ff || d.type === 3)), rb.out + JSON.stringify(ihdr));
-    check('--x：切得不碎（每张平均高 ≥ 2000）、列出发帖分组', ihdr.reduce((a, d) => a + d.h, 0) / Math.max(1, ihdr.length) >= 2000 && /发帖分组/.test(rb.out) && /第 1 帖/.test(rb.out), rb.out);
+    check('--x full：切得不碎（每张平均高 ≥ 2000）、列出发帖分组', ihdr.reduce((a, d) => a + d.h, 0) / Math.max(1, ihdr.length) >= 2000 && /发帖分组/.test(rb.out) && /第 1 帖/.test(rb.out), rb.out);
     const xh = fs.existsSync(path.join(xd, 'page-01.html')) ? fs.readFileSync(path.join(xd, 'page-01.html'), 'utf8') : '';
-    check('--x：用的是手机版页面（同一套版式）', /class="page m"/.test(xh) && !/x-cols/.test(xh), xh.slice(0, 300));
-    rb = run([bc, '--x', '--wide', '--out', path.join(bd, 'xw'), '--html-only']);
-    check('--x 和 --wide 一起用 → 报错', rb.code !== 0 && /--x/.test(rb.out), rb.out);
+    check('--x full：用的是手机版页面（同一套版式）', /class="page m"/.test(xh) && !/x-cols/.test(xh), xh.slice(0, 300));
+    // A re-render that cuts a page into fewer strips must not leave the old extra strip behind (it would be uploaded).
+    if (xs.length) {
+      for (const stale of ['x-01-9.png', 'x-01-1.jpg']) fs.copyFileSync(path.join(xd, xs[0]), path.join(xd, stale));
+      rb = run([bc, '--x=full', '--page', '1', '--out', xd]);
+      const after = fs.readdirSync(xd).filter((x) => /^x-\d+-\d+\.(png|jpg)$/.test(x));
+      check('--x full：重渲时删掉这一页上次多出来的旧竖条，别的页不动', rb.code === 0 && !after.includes('x-01-9.png') && !after.includes('x-01-1.jpg')
+        && xs.every((x) => after.includes(x)), rb.out + after.join(' '));
+    }
+    // X 版 (--x): the model's text-first X draft (content.json "x"), laid out as one column and cut into strips about a
+    // phone screen tall (≤ 2.6 × the width); excerpts marked 原文 are checked against article.md word for word.
+    {
+      const xd2 = path.join(OUT, 'xdraft');
+      fs.mkdirSync(xd2, { recursive: true });
+      const P = (i) => `第 ${i} 段原文：做内容最难的不是写，而是想清楚要说什么。想清楚以后，一句一句说清楚就行。`;
+      fs.writeFileSync(path.join(xd2, 'article.md'), `---\ntitle: 测试\n---\n\n# 测试文章\n\n${[1, 2, 3, 4, 5, 6, 7, 8].map(P).join('\n\n')}\n`);
+      fs.writeFileSync(path.join(xd2, 'pic.png'), PNG);
+      const blocks = [
+        { quote: [P(1), P(2)] },
+        { note: '全文只讲一件事：先想清楚，再说清楚。', label: '解读' },
+        ...[1, 2, 3, 4].flatMap((k) => [
+          { h: `第 ${k} 部分：先想清楚再动笔` },
+          { text: '这里是编者整理的一段正文，讲清这一部分的做法和理由。先写下要说的一句话，再补上为什么和怎么做。' },
+          { quote: `第 ${k + 2} 段原文：做内容最难的不是写，……一句一句说清楚就行。` },
+          { list: ['第一条做法：先写结论', '第二条做法：再写理由', '第三条做法：最后举例'], ordered: true },
+          { table: { head: ['步骤', '做法', '用时'], rows: [['一', '先想', '十分钟'], ['二', '再写', '半小时']] } },
+          { key: '先想清楚，再说清楚。' },
+        ]),
+        { figure: { type: 'image', src: 'pic.png', caption: '本地图片用相对路径' } },
+      ];
+      const xdraft = { title: '想清楚，\n再说清楚', source: g.source, x: { kind: 'report', intro: '一篇测试文章的 X 稿：原文节选加编者解读。', blocks } };
+      const xc = path.join(xd2, 'content.json');
+      fs.writeFileSync(xc, JSON.stringify(xdraft));
+      const xo = path.join(xd2, 'out');
+      fs.mkdirSync(xo, { recursive: true });
+      fs.writeFileSync(path.join(xo, 'x-02-1.png'), PNG); // the full version's strip left in the folder
+      fs.writeFileSync(path.join(xo, 'page-01.html'), '<p>old</p>');
+      rb = run([xc, '--x', '--out', xo]);
+      const bs = fs.readdirSync(xo).filter((x) => /^x-\d+-\d+\.png$/.test(x)).sort();
+      const bi = bs.map((x) => pngInfo(xo, x));
+      check('--x：只有 X 稿也能出；切成 1080 宽、高 ≤ 宽的 2.6 倍的竖条，PNG-8，0 错误、没有切口提示、列出发帖分组', rb.code === 0 && /只有 X 稿/.test(rb.out) && /版面检查：0 个错误/.test(rb.out) && !/切口/.test(rb.out)
+        && bi.length >= 2 && bi.every((d) => d.w === 1080 && d.h <= Math.round(1080 * 2.6) + 40 && (!ff || d.type === 3)) && /第 1 帖/.test(rb.out), rb.out + JSON.stringify(bi));
+      check('--x：上次留下的旧竖条和完整版的 page-NN.html 删掉了', !fs.existsSync(path.join(xo, 'x-02-1.png')) && !fs.existsSync(path.join(xo, 'page-01.html')), fs.readdirSync(xo).join(' '));
+      const bh = fs.existsSync(path.join(xo, 'x.html')) ? fs.readFileSync(path.join(xo, 'x.html'), 'utf8') : '';
+      check('--x：一整条页面，页眉写内容类型；原文节选带「原文」标签、短评、有序列表、表格、关键句、图都在；页脚说明原文只删不改',
+        /class="page m xt"/.test(bh) && /要点 · 编者解读/.test(bh) && /class="xt-who">原文/.test(bh) && /class="xt-chip">解读/.test(bh) && /<ol class="xt-list">/.test(bh)
+        && /class="xt-table"/.test(bh) && /class="xt-key/.test(bh) && /file:\/\/[^"]*\/xdraft\/pic\.png/.test(bh) && /标「原文」的段落摘自原文，只删不改/.test(bh), bh.slice(0, 600));
+      rb = run([xc, '--x', '--page', '1', '--out', path.join(xd2, 'xp'), '--html-only']);
+      check('--x 加 --page → 报错：X 版是一整条，不分页', rb.code !== 0 && /--page/.test(rb.out), rb.out);
+      rb = run([xc, '--x', '--wide', '--out', path.join(xd2, 'xw'), '--html-only']);
+      check('--x 和 --wide 一起用 → 报错', rb.code !== 0 && /--x/.test(rb.out), rb.out);
+      rb = run([xc, '--check']);
+      check('只有 X 稿时不加 --x → 报错：要出长图、卡片先写 pages', rb.code !== 0 && /只有 X 稿/.test(rb.out) && /pages/.test(rb.out), rb.out);
+      const xbad = JSON.parse(JSON.stringify(xdraft));
+      xbad.x.blocks[0].quote[0] = P(1).replace('最难', '最苦');
+      xbad.x.blocks.push({ figure: { type: 'image', src: 'missing.png' } });
+      fs.writeFileSync(xc, JSON.stringify(xbad));
+      rb = run([xc, '--x', '--check']);
+      check('--x：标了原文却改了字 → 报错并指出从哪里对不上；图片块找不到文件 → 报错', rb.code !== 0 && /x\.blocks\[0\]\.quote\[0\]: 标了「原文」，但原文里找不到/.test(rb.out)
+        && /x\.blocks\[\d+\]\.figure：找不到图片文件 missing\.png/.test(rb.out), rb.out);
+      const xwarn = JSON.parse(JSON.stringify(xdraft));
+      xwarn.x.kind = 'story';
+      xwarn.x.blocks.find((b) => b.table).table = { head: ['一', '二', '三', '四', '五'], rows: [['1', '2', '3', '4', '5']] };
+      fs.writeFileSync(xc, JSON.stringify(xwarn));
+      rb = run([xc, '--x', '--check']);
+      check('--x：故事配了图 → 提示删掉；表格超过 4 列 → 提示', rb.code === 0 && /故事用不上图/.test(rb.out) && /5 列在手机宽度放不下/.test(rb.out), rb.out);
+      rb = run([bc, '--x', '--check']);
+      check('有 pages 没有 x 时 --x → 报错：先判断内容类型写 X 稿，只要切条用 --x full', rb.code !== 0 && /X 版要 content\.json 里的 "x"/.test(rb.out) && /--x full/.test(rb.out), rb.out);
+    }
     rb = run([f, '--ratio', '3:4', '--form', 'qa', '--out', path.join(bd, 'noqa')]);
     check('--form qa 没有 qa 字段 → 报错', rb.code !== 0 && /qa/.test(rb.out), rb.out);
     rb = run([bc, '--ratio', '3:4', '--out', path.join(bd, 'cards'), '--html-only']);
@@ -707,8 +774,16 @@ console.log('\n== 批量 · 发布清单 · 发布记录');
   fs.writeFileSync(path.join(xdir, 'midnight-x', 'qa.json'), JSON.stringify([{ theme: 'midnight', issues: [] }]));
   r = exec(BATCH, ['checklist', xdir]);
   xkit = fs.existsSync(path.join(xdir, 'publish.md')) ? fs.readFileSync(path.join(xdir, 'publish.md'), 'utf8') : '';
-  check('发布清单：有 X 版时 X 一节用它，9 张一帖发完、按页序上传', /## X（midnight-x，9 张 X 长图）/.test(xkit) && /✓ 9 张，都在 X 的 4096px 以内，分 1 帖（每帖最多 20 张）/.test(xkit)
+  check('发布清单：有 X 版时 X 一节用它，9 张一帖发完、按页序上传', /## X（midnight-x，9 张 X 完整版）/.test(xkit) && /✓ 9 张，都在 X 的 4096px 以内，分 1 帖（每帖最多 20 张）/.test(xkit)
     && /1\. 主帖：x-01-1\.png、x-01-2\.png、x-01-3\.png、x-01-4\.png、x-02-1\.png、x-02-2\.png、x-02-3\.png、x-03-1\.png、x-04-1\.png/.test(xkit), r.out + xkit);
+  // The X version (x.html next to the strips) wins over the full version.
+  fs.mkdirSync(path.join(xdir, 'midnight-xb'));
+  for (const f of ['x-01-1.png', 'x-01-2.png', 'x-01-3.png']) fs.writeFileSync(path.join(xdir, 'midnight-xb', f), sized(1080, 2400));
+  fs.writeFileSync(path.join(xdir, 'midnight-xb', 'x.html'), '<main class="page m xt"></main>');
+  fs.writeFileSync(path.join(xdir, 'midnight-xb', 'qa.json'), JSON.stringify([{ theme: 'midnight', issues: [] }]));
+  r = exec(BATCH, ['checklist', xdir]);
+  xkit = fs.existsSync(path.join(xdir, 'publish.md')) ? fs.readFileSync(path.join(xdir, 'publish.md'), 'utf8') : '';
+  check('发布清单：有 X 版（以文字为主）时 X 一节优先用它，按顺序上传', /## X（midnight-xb，3 张 X 版）/.test(xkit) && /1\. 主帖：x-01-1\.png、x-01-2\.png、x-01-3\.png/.test(xkit), r.out + xkit);
 
   // Batch: local files as links, a video link (recorded, not fetched), a link that cannot be fetched, a stub article.
   fs.writeFileSync(path.join(src, 'pipeline.md'), `# Content Pipeline Notes\n\n${Array(20).fill(para).join('\n\n')}\n`);
@@ -748,16 +823,24 @@ console.log('\n== 批量 · 发布清单 · 发布记录');
   // batch.mjs carries a copy of fetch.mjs's slug rule (fetch.mjs is a script, not a module): the two must not drift.
   const fn = (f) => fs.readFileSync(path.join(SKILL, 'scripts', f), 'utf8').match(/function slugify\(meta\) \{[\s\S]*?\n\}/)?.[0];
   check('批量：batch.mjs 的目录命名规则和 fetch.mjs 一致', !!fn('fetch.mjs') && fn('fetch.mjs') === fn('batch.mjs'));
-  // Batch spec x: the X strips are a form of their own, rendered with long.mjs --x.
+  // Batch spec x: the X version is a form of its own. It needs the X draft ("x" in content.json) first, then long.mjs --x.
   {
     const xr = path.join(OUT, 'batch-x');
     fs.mkdirSync(path.join(xr, 'src'), { recursive: true });
     fs.writeFileSync(path.join(xr, 'src', 'x.md'), `# X 长图\n\n${Array(20).fill(para).join('\n\n')}\n`);
     exec(BATCH, ['init', path.join(xr, 'src', 'x.md'), '--name', 'x', '--spec', 'x', '--root', xr, '--no-proxy']);
     const xq = JSON.parse(fs.readFileSync(path.join(xr, 'batches', 'x', 'queue.json'), 'utf8'));
-    fs.copyFileSync(gallery, path.join(xr, xq.items[0].slug, 'content.json'));
+    const xcj = path.join(xr, xq.items[0].slug, 'content.json');
+    const gx = JSON.parse(fs.readFileSync(gallery, 'utf8'));
+    fs.writeFileSync(xcj, JSON.stringify(gx));
+    const rn = exec(BATCH, ['next', 'x', '--root', xr]);
+    gx.x = { kind: 'report', blocks: [{ h: '小标题' }, { text: '一段正文。' }] };
+    fs.writeFileSync(xcj, JSON.stringify(gx));
     const rx = exec(BATCH, ['next', 'x', '--root', xr]);
-    check('批量：--spec x 的下一步是 long.mjs … --x', /long\.mjs" ".*content\.json" --x/.test(rx.out), rx.out);
+    check('批量：--spec x 先要 X 稿（还没有 x 时提示去写），有了以后下一步是 long.mjs … --x', /还没有 x/.test(rn.out) && /long\.mjs" ".*content\.json" --x/.test(rx.out), rn.out + rx.out);
+    exec(BATCH, ['init', path.join(xr, 'src', 'x.md'), '--name', 'xf', '--spec', 'x-full', '--root', xr, '--no-proxy']);
+    const rf = exec(BATCH, ['next', 'xf', '--root', xr]);
+    check('批量：--spec x-full 的下一步是 long.mjs … --x full', /long\.mjs" ".*content\.json" --x full/.test(rf.out), rf.out);
   }
 }
 

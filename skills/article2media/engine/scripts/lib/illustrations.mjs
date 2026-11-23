@@ -113,12 +113,15 @@ export function resolveIllustrations(content, theme, dir) {
  */
 export function resolveImageFigures(content, dir) {
   const missing = [];
-  (content.pages || []).forEach((pg, pi) => (pg.sections || []).forEach((sec, si) => (sec.figures || []).forEach((f, fi) => {
+  const resolve = (f, where) => {
     if (f?.type !== 'image' || typeof f.src !== 'string' || /^(https?|data):/i.test(f.src)) return;
     const file = f.src.startsWith('file:') ? fileURLToPath(f.src) : path.resolve(dir, f.src);
-    if (!fs.existsSync(file)) { missing.push({ where: `第 ${pi + 1} 页第 ${si + 1} 节图 ${fi + 1}`, src: f.src }); return; }
+    if (!fs.existsSync(file)) { missing.push({ where, src: f.src }); return; }
     f.src = pathToFileURL(file).href;
-  })));
+  };
+  (content.pages || []).forEach((pg, pi) => (pg.sections || []).forEach((sec, si) => (sec.figures || []).forEach((f, fi) => resolve(f, `第 ${pi + 1} 页第 ${si + 1} 节图 ${fi + 1}`))));
+  // The X draft's figure blocks ("x".blocks[i].figure) are laid out the same way.
+  (content.x?.blocks || []).forEach((b, i) => { if (b && typeof b === 'object') resolve(b.figure, `x.blocks[${i}].figure`); });
   return missing;
 }
 

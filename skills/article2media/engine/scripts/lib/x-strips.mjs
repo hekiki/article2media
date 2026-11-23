@@ -1,4 +1,6 @@
-// X 版长图: the phone long page cut into strips that X keeps at full width.
+// X 版长图: a long page cut into strips that X keeps at full width. Two versions use it: the X version (the default
+// --x: the model's text-first draft laid out as one continuous column, see buildX in layout-long.mjs) and the full
+// version (--x full: every phone page as it is).
 //
 // X fits every picture into a 4096 px long side and its phone app shows the 2048 px version by default, so a
 // 1080 × 9000+ phone page arrives 240–480 px wide: unreadable on a phone and blurry on a desktop, which scales it
@@ -20,6 +22,11 @@ export const X_STRIP = {
   perPost: 20, // pictures per X post (20 since Nov 2026; it was 4)
 };
 
+// The X version (text first): the phone page's column and type, strips about as tall as a phone screen. X's phone
+// viewer fits a picture to the screen, so a strip of ~2.2 × its width fills it edge to edge and its 17.5 px body
+// (3.2% of the width) shows at ≈ 12 pt; a taller one shrinks to fit and wastes the screen's sides.
+export const X_TEXT = { ...X_STRIP, width: 540, prefRatio: 2.2, looseRatio: 2.45, capRatio: 2.6 };
+
 const PENALTY = { 3: 0, 2: 150, 1: 300, 0: 3000, '-1': 20000 };
 
 /**
@@ -30,9 +37,10 @@ const PENALTY = { 3: 0, 2: 150, 1: 300, 0: 3000, '-1': 20000 };
 export function measureCuts() {
   const H = Math.ceil(document.documentElement.scrollHeight);
   const root = document.querySelector('.page') || document.body;
-  const FLOW = [['.page', 3], ['.sec', 2], ['.sec-text, .sec-vis, .figs, .cl-grid, .sec-bullets, .pg-head, .pg-head-main', 1]];
-  const KEEP_NEXT = '.sec-label, .sec-h, .pg-top, .pg-title, .pg-part, .cl-head, .cl-label, .cl-title, .p-title, .fig-id, .st-head, h1, h2, h3, h4, h5, h6';
-  const KEEP_PREV = '.fig-cap, .sec-take, .cl-done, .cl-guard-note, .cl-note, .fx-note';
+  const FLOW = [['.page', 3], ['.sec', 2], ['.xt-sec', 2], ['.sec-text, .sec-vis, .figs, .cl-grid, .sec-bullets, .pg-head, .pg-head-main, .xt-quote, .xt-list', 1]];
+  // In the X version a heading or an excerpt's label leads into what follows; the editor's comment stays with what it is about.
+  const KEEP_NEXT = '.sec-label, .sec-h, .pg-top, .pg-title, .pg-part, .xt-h, .xt-who, .xt-intro, .cl-head, .cl-label, .cl-title, .p-title, .fig-id, .st-head, h1, h2, h3, h4, h5, h6';
+  const KEEP_PREV = '.fig-cap, .sec-take, .xt-note, .xt-table-note, .cl-done, .cl-guard-note, .cl-note, .fx-note';
   const levelOf = (e) => { for (const [sel, l] of FLOW) if (e.matches(sel)) return l; return 0; };
   const ignored = (e) => {
     if (e.closest('[data-deco], [aria-hidden="true"]')) return true;
@@ -78,11 +86,13 @@ export function measureCuts() {
       const a = kids[i - 1], b = kids[i];
       const gap = b.k.top - a.k.bottom;
       if (gap < 0) continue;
-      if (a.e.matches(KEEP_NEXT) || b.e.matches(KEEP_PREV)) continue;
       const y = (a.k.bottom + b.k.top) / 2;
+      // [data-x-break]: the picture ends after this block, whatever the heights.
+      if (a.e.hasAttribute('data-x-break')) { cands.push({ y, gap, level: 3, pid: parent.dataset.xcut, box: '', forced: true }); continue; }
+      if (a.e.matches(KEEP_NEXT) || b.e.matches(KEEP_PREV)) continue;
       // Anything else drawn across the line (a neighbouring column, a taller sibling) would be sliced.
       if (els.some((x) => x.k.top < y - 0.5 && x.k.bottom > y + 0.5 && !x.e.contains(a.e))) continue;
-      cands.push({ y, gap, level, pid: parent.dataset.xcut, box: level ? '' : String(parent.className || parent.tagName).split(' ')[0] });
+      cands.push({ y, gap, level, pid: parent.dataset.xcut, box: level ? '' : String(parent.getAttribute('class') || parent.tagName).split(' ')[0] });
     }
   }
   return { H, cands };
@@ -97,13 +107,32 @@ export function measureCuts() {
 export function planStrips(H, cands, opt = {}) {
   const o = { ...X_STRIP, ...opt };
   if (!(H > 0)) throw new Error('planStrips: bad height');
+  const padOf = (c) => (c ? Math.max(0, o.margin - c.gap / 2) : 0);
+  // Forced cuts (forced: true) split the page into parts planned one by one; a part's end gets the cut's padding.
+  const forced = cands.filter((c) => c.forced && c.y > 0 && c.y < H).sort((a, b) => a.y - b.y);
+  if (forced.length) {
+    const ends = [{ y: 0 }, ...forced, { y: H }];
+    const out = [];
+    for (let i = 0; i + 1 < ends.length; i++) {
+      const a = ends[i], b = ends[i + 1];
+      const top = i ? padOf(a) : 0, bot = i + 2 < ends.length ? padOf(b) : 0;
+      const sub = cands.filter((c) => !c.forced && c.y > a.y && c.y < b.y).map((c) => ({ ...c, y: c.y - a.y }));
+      const part = planStrips(b.y - a.y, sub, { ...opt, maxPx: o.maxPx - Math.ceil((top + bot) * o.scale) });
+      for (const s of part) { s.y0 += a.y; s.y1 += a.y; }
+      Object.assign(part[0], { padTop: top, pidTop: a.pid });
+      if (bot) Object.assign(part.at(-1), { padBot: bot, pidBot: b.pid, level: b.level, box: b.box || '' });
+      for (const s of part) s.px = Math.round((s.y1 - s.y0 + s.padTop + s.padBot) * o.scale);
+      out.push(...part);
+    }
+    return out;
+  }
   const W = 1080 / o.scale;
-  const pref = W * o.prefRatio, loose = W * o.looseRatio, cap = o.maxPx / o.scale;
+  // capRatio: a tighter limit than X's own (the X version keeps its type large in X's fit-to-screen viewer).
+  const pref = W * o.prefRatio, loose = W * o.looseRatio, cap = Math.min(o.maxPx / o.scale, o.capRatio ? W * o.capRatio : Infinity);
   const real = [...cands].filter((c) => c.y > 0 && c.y < H).sort((a, b) => a.y - b.y);
   // Last resort when a block taller than a strip has no gap: a raw cut every 20 px, reported as such.
   const raw = [];
   for (let y = 20; y < H; y += 20) raw.push({ y, gap: 0, level: -1, box: '' });
-  const padOf = (c) => (c ? Math.max(0, o.margin - c.gap / 2) : 0);
   const solve = (pts, n) => {
     const target = H / n;
     const dp = Array.from({ length: n + 1 }, () => new Array(pts.length).fill(Infinity));
@@ -132,9 +161,18 @@ export function planStrips(H, cands, opt = {}) {
   if (n > 1 && H / (n - 1) <= loose) n -= 1;
   for (const pool of [real, [...real, ...raw].sort((a, b) => a.y - b.y)]) {
     const pts = [{ y: 0, gap: 0, level: 3 }, ...pool, { y: H, gap: 0, level: 3 }];
+    // The fewest strips that fit; but when that count only fits by cutting through a card, up to two more strips
+    // that cut between blocks are better.
+    let first = null, firstM = 0;
     for (let m = n; m <= n + 40; m++) {
-      const idx = solve(pts, m);
-      if (!idx) continue;
+      if (first && m > firstM + 2) break;
+      const got = solve(pts, m);
+      if (!got) continue;
+      if (!first) { first = got; firstM = m; }
+      if (got.slice(0, -1).every((j) => pts[j].level >= 1)) { first = got; break; }
+    }
+    if (first) {
+      const idx = first;
       let prev = 0;
       return idx.map((j) => {
         const a = pts[prev], b = pts[j];

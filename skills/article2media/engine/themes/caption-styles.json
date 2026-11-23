@@ -53,6 +53,17 @@
       "--cap-stroke-w": "5px"
     }
   },
+  "dusk": {
+    "style": "block",
+    "vars": {
+      "--cap-bg": "#291B32",
+      "--cap-fg": "#F7ECE2",
+      "--cap-key": "#FCC2B2",
+      "--cap-weight": "700",
+      "--cap-radius": "0",
+      "--cap-shadow": "0 8px 22px -12px rgba(41,27,50,.55)"
+    }
+  },
   "earth": {
     "style": "ink",
     "vars": {

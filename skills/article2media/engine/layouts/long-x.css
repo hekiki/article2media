@@ -1,0 +1,80 @@
+/* Layout: X 版 (long.mjs --x) — loaded after long-mobile.css. Text first: one continuous phone-width column
+   (540 CSS px → 1080 px at 2x) of the model's X draft (content.json "x"): original excerpts, the editor's short
+   comments, text, lists, tables, key lines, code, rarely a figure. render cuts it into strips about a phone screen tall. */
+
+.page.m.xt { padding: 28px 30px 26px; }
+.xt .pg-title { margin-top: 18px; }
+.xt-intro {
+  margin-top: 12px; padding-bottom: 18px; border-bottom: var(--sec-rule, 1px solid var(--rule));
+  font-size: 16px; line-height: 1.75; color: var(--muted);
+}
+
+/* ---------- Sections (a new one at each heading) ---------- */
+.xt-sec { padding-top: 20px; }
+.xt-sec + .xt-sec { margin-top: 6px; padding-top: 22px; border-top: 1px solid var(--rule); }
+.xt-sec > :last-child { margin-bottom: 0; }
+.xt-h {
+  font-family: var(--font-head); font-weight: var(--w-h2, 900); font-size: calc(var(--fs-h2, 34px) * .72);
+  line-height: 1.38; color: var(--title-ink, var(--ink)); margin: 0 0 12px;
+  word-break: keep-all; overflow-wrap: anywhere; /* break at punctuation, inside a run only when it cannot fit */
+}
+
+/* ---------- Original excerpts: a rule and a label, otherwise the plain body ---------- */
+.xt-quote { margin: 0 0 16px; padding-left: 14px; border-left: 3px solid var(--accent-1); }
+.xt-quote p { margin: 0; }
+.xt-quote p + p { margin-top: 6px; }
+.xt-who { font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: .04em; line-height: 1.5; margin-bottom: 4px; }
+/* A second excerpt from the same speaker: what lies between was cut. */
+.xt-quote.cont { margin-top: -6px; }
+.xt-quote.cont::before { content: "……"; display: block; color: var(--muted); line-height: 1.2; margin-bottom: 4px; }
+
+/* ---------- The editor's comment ---------- */
+.xt-note {
+  margin: 0 0 16px; padding: 11px 14px 12px; background: var(--card); border-radius: var(--radius);
+  box-shadow: var(--card-shadow, 0 0 0 1px var(--rule-soft)); font-size: 16.5px; line-height: 1.75;
+}
+.xt-chip {
+  display: inline-block; margin-right: 8px; padding: 0 7px; border-radius: var(--radius-sm, 4px);
+  background: var(--accent-1); color: var(--on-acc, #fff); font-size: 12.5px; font-weight: 800; line-height: 1.75;
+  letter-spacing: .04em; vertical-align: 1px;
+}
+
+/* ---------- Text, key lines, lists ---------- */
+.xt-text { margin: 0 0 12px; }
+.xt-key {
+  margin: 2px 0 16px; font-family: var(--font-head); font-weight: 800; font-size: 20px; line-height: 1.55;
+  color: var(--acc-text);
+}
+.xt-list { list-style: none; margin: 0 0 14px; }
+.xt-list li { position: relative; display: flex; gap: 10px; margin-bottom: 8px; }
+.xt-list li:last-child { margin-bottom: 0; }
+ul.xt-list li { padding-left: 16px; display: block; }
+ul.xt-list li::before { content: ""; position: absolute; left: 2px; top: .78em; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-1); }
+.xt-list i {
+  flex: none; min-width: 20px; font-style: normal; font-family: var(--font-label, var(--font-head)); font-weight: 900;
+  color: var(--accent-1); filter: saturate(1.1);
+}
+
+/* ---------- Text tables (a roundup's names, quotas, verdicts) ---------- */
+.xt-table { margin: 2px 0 16px; }
+.xt-table-title { font-family: var(--font-head); font-weight: 800; font-size: 15.5px; margin-bottom: 6px; }
+.xt-table table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.55; }
+.xt-table th { text-align: left; font-weight: 800; padding: 6px 10px 6px 0; border-bottom: 2px solid var(--ink); vertical-align: bottom; }
+.xt-table td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.xt-table td:first-child { font-weight: 700; }
+/* The first column names the row ("货币超发", "签字权"): keep its words whole, let the longer columns wrap. */
+.xt-table th:first-child, .xt-table td:first-child { word-break: keep-all; overflow-wrap: break-word; }
+.xt-table th:last-child, .xt-table td:last-child { padding-right: 0; }
+.xt-table-note { font-size: 13px; color: var(--muted); margin-top: 6px; line-height: 1.6; }
+
+/* ---------- Commands and prompts, as written ---------- */
+.xt-code {
+  margin: 0 0 14px; padding: 10px 12px; background: var(--card); border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 0 0 1px var(--rule-soft); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+/* ---------- A figure (rare) ---------- */
+.xt-fig { margin: 4px 0 16px; }
+
+.xt .pg-foot { margin-top: 18px; border-top: 1px solid var(--rule); }

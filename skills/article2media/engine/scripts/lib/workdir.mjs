@@ -25,14 +25,14 @@ export const METRICS = [
   { key: 'follows', zh: '涨粉' },
 ];
 export const FORMS = {
-  cards: '总结卡片', 'cards-original': '原文卡片', long: '总结长图', 'long-x': 'X 长图', 'long-original': '原文长图',
+  cards: '总结卡片', 'cards-original': '原文卡片', long: '总结长图', 'long-x': 'X 版', 'long-x-full': 'X 完整版', 'long-original': '原文长图',
   wechat: '公众号排版', video: '口播视频', whiteboard: '白板', comic: '漫画',
 };
 // Which forms a platform usually takes, most likely first (used to guess what a post was).
 const PLATFORM_FORMS = {
   xhs: ['cards', 'cards-original', 'comic', 'video'],
   wechat: ['wechat'],
-  x: ['long-x', 'long', 'long-original', 'cards', 'video'],
+  x: ['long-x', 'long-x-full', 'long', 'long-original', 'cards', 'video'],
   douyin: ['video', 'cards'],
   channels: ['video'],
   weibo: ['long', 'cards', 'long-original'],
@@ -75,7 +75,8 @@ function classify(dir, name) {
   const cards = numbered(files, 'card');
   const pages = numbered(files, 'page');
   const fulls = files.filter((f) => /^full(-\d+)?\.png$/.test(f)).sort();
-  // X strips (long.mjs --x): x-<page>-<k>.png, in upload order.
+  // X strips: x-<page>-<k>.png, in upload order. The brief (long.mjs --x) is built from x.html, the full version
+  // (--x full) from page-NN.html.
   const strips = files.filter((f) => parseStripName(f)).sort((a, b) => { const x = parseStripName(a), y = parseStripName(b); return x.page - y.page || x.k - y.k; });
   const base = path.basename(name);
   const ratio = base.match(/(?:^|-)(\d+)x(\d+)(?:-|$)/);
@@ -91,7 +92,7 @@ function classify(dir, name) {
   else if (files.includes('wechat.md') || files.includes('article-body.html')) Object.assign(o, { form: 'wechat', theme: o.theme || prefix(/-wechat.*$/), files: ['article.html'], cover: files.includes('cover-2.35x1.png') ? 'cover-2.35x1.png' : null, ratio: null });
   else if (files.includes('comic.png')) Object.assign(o, { form: 'comic', theme: null, files: cards.length ? cards : ['comic.png'], cover: cards[0] || 'comic.png', ratio: cards.length ? '3:4' : null });
   else if (files.includes('whiteboard.png')) Object.assign(o, { form: 'whiteboard', theme: null, files: ['whiteboard.png'], cover: 'whiteboard.png' });
-  else if (strips.length) Object.assign(o, { form: 'long-x', theme: o.theme || prefix(/-x$/), files: strips, cover: strips[0] });
+  else if (strips.length) Object.assign(o, { form: files.includes('x.html') ? 'long-x' : 'long-x-full', theme: o.theme || prefix(/-x(-full)?$/), files: strips, cover: strips[0] });
   else if (cards.length) {
     const original = (qa && !Array.isArray(qa) && 'verify' in qa) || files.includes('ledger.json');
     Object.assign(o, { form: original ? 'cards-original' : 'cards', theme: original ? prefix(/-?full.*$/) : o.theme || prefix(/-\d+x\d+.*$/), files: cards, cover: cards[0] });
@@ -124,7 +125,7 @@ export const contentTheme = (content, form) => {
   const t = content?.theme;
   if (!t) return null;
   if (typeof t === 'string') return t;
-  return t[{ cards: 'cards', long: 'long', wechat: 'wechat' }[form]] || null;
+  return t[{ cards: 'cards', long: 'long', 'long-x': 'long', 'long-x-full': 'long', wechat: 'wechat' }[form]] || null;
 };
 
 /**
@@ -363,18 +364,18 @@ export function buildPublishKit(dir, { schedule = {}, statsCmd = 'stats.mjs' } =
 
   // X: the X strips (long.mjs --x). A phone or original long image only when nothing else was made, flagged when it is
   // taller than X's 4096 px cap — X shrinks it to a few hundred px wide and the text can no longer be read.
-  const xForm = ['long-x', 'long', 'long-original'].find((f) => outputs.some((o) => o.form === f));
+  const xForm = ['long-x', 'long-x-full', 'long', 'long-original'].find((f) => outputs.some((o) => o.form === f));
   pick = xForm ? pickOutput(outputs, { platform: 'x', form: xForm, content }) : { output: null, others: [] };
   if (pick.output) {
     const o = pick.output;
     const title = plainTitle(content?.title) || fm.title || '';
-    const isStrips = o.form === 'long-x';
+    const isStrips = o.form === 'long-x' || o.form === 'long-x-full';
     const posts = isStrips ? groupPosts(stripsByPage(o.files)) : null;
-    section('x', `X（${o.name}，${o.count} 张${isStrips ? ' X 长图' : '长图'}）`, o, pick.others, ({ add }) => {
+    section('x', `X（${o.name}，${o.count} 张${isStrips ? ` ${FORMS[o.form]}` : '长图'}）`, o, pick.others, ({ add }) => {
       const sizes = o.files.map((f) => ({ f, d: imageSize(path.join(o.path, f)) })).filter((x) => x.d);
       const tall = sizes.filter((x) => Math.max(x.d.w, x.d.h) > X_STRIP.maxPx);
       if (isStrips) {
-        add(tall.length ? 'error' : 'ok', tall.length ? `${tall.map((x) => x.f).join('、')} 超过 ${X_STRIP.maxPx}px：重新运行 long.mjs --x` : `${o.count} 张，都在 X 的 ${X_STRIP.maxPx}px 以内，分 ${posts.length} 帖（每帖最多 ${LIMITS.xImages} 张）`);
+        add(tall.length ? 'error' : 'ok', tall.length ? `${tall.map((x) => x.f).join('、')} 超过 ${X_STRIP.maxPx}px：重新运行 long.mjs --x${o.form === 'long-x-full' ? ' full' : ''}` : `${o.count} 张，都在 X 的 ${X_STRIP.maxPx}px 以内，分 ${posts.length} 帖（每帖最多 ${LIMITS.xImages} 张）`);
       } else {
         if (tall.length) {
           const d = tall.reduce((m, x) => (Math.max(x.d.w, x.d.h) > Math.max(m.d.w, m.d.h) ? x : m)).d;

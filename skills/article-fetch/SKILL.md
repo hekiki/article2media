@@ -18,7 +18,7 @@ version: "2.4.0"
 ```bash
 node ${CLAUDE_SKILL_DIR}/scripts/doctor.mjs
 ```
-需要 Node 22+；网页和公众号要用到本机 Chrome。失败时把修复建议转告用户，然后停下。
+需要 Node 22+；网页和公众号要用到本机 Chrome。缺的是要用户自己安装的东西时，把修复建议转告用户，然后停下；其他失败（例如 Chrome 启动超时）先自己排查、重试一次。
 
 ## 2. 抓取
 ```bash

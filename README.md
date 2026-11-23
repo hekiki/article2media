@@ -58,7 +58,7 @@ article2media 把这件事交给 AI。你给一个链接，流程分三步：
 | **原文、总结、翻译三条路** | 原文路径一字不改，逐块读回比对；总结路径重组结构、配图表；翻译路径全文不删，脚本检查结构是否逐块对应。三条路都能接到长图、卡片和公众号。 |
 | **文章和视频都能当原文** | 视频先转成逐字稿文章：人工字幕优先，其次平台的原语言自动字幕，都没有时用本地 Whisper 识别。繁体转简体、专有名词纠错、时间轴都会处理好，后面的流程和文章完全一样。 |
 | **先读懂，再排版** | 不是截图，也不是机械摘要。Claude 规划结构、改写标题、挑选图表、核对数字，产出只含内容的 `content.json`。版式和主题由脚本负责，换风格不用重写内容。 |
-| **一份内容，多种产出** | 一次改写，同时出长图、卡片（3:4 / 4:5 / 1:1 / 9:16）和公众号，还能切出一页看完、金句图、问答卡；口播视频、白板、漫画另有专门的脚本。12 套主推主题对所有图文产出通用，口播视频沿用主题的配色、字体和卡片样式。 |
+| **一份内容，多种产出** | 一次改写，同时出长图、卡片（3:4 / 4:5 / 1:1 / 9:16）和公众号，还能切出一页看完、金句图、问答卡；口播视频、白板、漫画另有专门的脚本。13 套主推主题对所有图文产出通用，口播视频沿用主题的配色、字体和卡片样式。 |
 | **为信息流的第一眼设计** | 封面有 6 种版式（大字钩子、大数字、左右对比、一句论断、插画通栏、目录），可以一次出几版来挑。一组卡片里穿插整页金句、整页大数字和整页图，不再张张同一个结构。卡片自己把空间用满：图表按内容放大，有余量就放大字号、补要点。 |
 | **手机上直接能读** | 长图默认是 1080 宽的单栏手机版，正文不用放大；需要电脑上看或打印时，`--wide` 出 1200 宽的双栏杂志版。 |
 | **认得出是谁的** | 品牌包把头像、品牌色、期号和一行介绍带到封面、末张和长图页脚，做成系列。 |
@@ -153,7 +153,7 @@ node skills/article2media/scripts/fonts.mjs    # 可选：把主题字体下载�
 
 | 产出 | 规格 | 适合 | 触发方式 | 示例里的主题 |
 |---|---|---|---|---|
-| **总结长图**（默认） | 手机版：1080 宽单栏，页数由内容决定；每节有标题、要点、两张图表和一个数据面板，结尾附执行清单。`--wide` 出 1200 宽的双栏杂志版；`--x` 出发 X 的版本（同一版式切成 1080 宽、高不超过 4096 的竖条：X 不压缩，手机上点开不用放大） | 把长文读成一份可收藏的拆解；发微信、朋友圈、微博；发 X 用 `--x` | 不加参数 | `editorial` |
+| **总结长图**（默认） | 手机版：1080 宽单栏，页数由内容决定；每节有标题、要点、两张图表和一个数据面板，结尾附执行清单。`--wide` 出 1200 宽的双栏杂志版；`--x` 出发 X 的 X 版（按内容类型另写的以文字为主的 X 稿：原文节选、编者短评、表格、要点，排成一整条，切成 1080 宽、约一屏高、X 不压缩的竖条；`--x full` 把手机版每页原样切条） | 把长文读成一份可收藏的拆解；发微信、朋友圈、微博；发 X 用 `--x` | 不加参数 | `editorial` |
 | **卡片组** | 小红书 3:4（1080×1440）、IG 4:5、1:1、9:16；封面（6 种版式）+ 每节一卡（可穿插整页金句、大数字、整页图）+ 清单 + 要点，附发帖文案 | 信息流平台 | 提到比例或平台，或 `--ratio 3:4` | `brutal` |
 | **封面多版本** | 同一篇的几版封面：不同版式，或不同的标题钩子 | 挑封面；分开发布比效果 | 「多出几个封面」，或 `--covers` | `dopamine` |
 | **轻量形态** | 一页看完（一张图讲完全文）、金句图（每句一张）、问答卡（对话气泡） | 高频更新；给整组卡片引流 | 「一张图讲完」「金句图」「问答形式」，或 `--form` | `bento`、`guochao` |
@@ -275,18 +275,19 @@ flowchart LR
 
 ## 主题
 
-主推 12 套主题，同一份内容可以用任意主题渲染。每套除了配色和字体，还有自己的封面（标题处理、装饰、导语区）和整页金句卡的画法。没有指定时，Claude 依次按「明确偏好 → 题材 → 投放场景」选一个，规则见 [`references/styles.md`](skills/article2media/references/styles.md)。
+主推 13 套主题，同一份内容可以用任意主题渲染。每套除了配色和字体，还有自己的封面（标题处理、装饰、导语区）和整页金句卡的画法。没有指定时，Claude 依次按「明确偏好 → 题材 → 投放场景」选一个，规则见 [`references/styles.md`](skills/article2media/references/styles.md)。
 
-![12 套主推主题的封面和第一张内容卡](docs/themes.jpg)
+![13 套主推主题的封面和第一张内容卡](docs/themes.jpg)
 
 <details>
-<summary><b>12 套主推主题一览</b></summary>
+<summary><b>13 套主推主题一览</b></summary>
 
 | 主题 | 气质 | 首选场景 |
 |---|---|---|
 | `editorial` | 商业杂志：暖白纸面、宋体、沉稳主色 | 商业、创业、行业分析、人物观点、个人复盘 |
 | `swiss` | 瑞士极简：纯白、粗黑分割线、红黑双色 | 数据、研究、财经、严肃议题；设计与艺术 |
 | `quiet` | 静线：暖纸底、一种暗朱红、细线与留白 | 哲思、书与论文的深度解读、人文随笔 |
+| `dusk` | 暮色：腮红米底、深茄紫色块、莓红与蜜桃色大数字 | 新模型、新产品、新功能的解读与建议（值不值得、要不要换） |
 | `bento` | 便当格：灰底白色大圆角卡片、撞色 | 产品与工具的测评、横评、盘点；数码新品 |
 | `brutal` | 新粗野大字报：粗黑描边、硬投影、高饱和色块 | 教程、攻略、清单；自媒体运营与副业 |
 | `dopamine` | 多巴胺：彩色光斑、糖果撞色、大圆角 | 好物种草、美食探店、穿搭、健康养生、生活记录 |
@@ -618,7 +619,7 @@ skills/
 │       ├── scripts/             # fetch / render / export / translate / illustrate / video / comic / doctor / batch / stats / fonts
 │       │   └── lib/             # chrome（CDP 驱动）、各版式与原文账本、校验、出图；media/（视频转逐字稿）；video/（配音、对齐、镜头、渲染、字幕）
 │       ├── layouts/             # 各版式的结构 CSS
-│       ├── themes/              # 主题 CSS（catalog.json 列出 12 套主推和 9 套经典）；illustration-styles.json、caption-styles.json
+│       ├── themes/              # 主题 CSS（catalog.json 列出 13 套主推和 9 套经典）；illustration-styles.json、caption-styles.json
 │       └── assets/voices/       # 6 款公开音色（catalog.json）
 ├── article-fetch/               # 每个能力：SKILL.md、agents/openai.yaml、references/、scripts/（指向引擎的入口）
 ├── video-transcript/
@@ -642,7 +643,7 @@ scripts/install.sh               # 依赖检查（只提示，不下载）
 
 ```bash
 node tests/run-all.mjs --quick                  # 11 个 skill 的结构、CLI 行为、各能力检查、每个示例 × 7 种版式
-node tests/run-all.mjs                          # 4 个示例 × 7 种版式 × 12 套主推主题
+node tests/run-all.mjs                          # 4 个示例 × 7 种版式 × 13 套主推主题
 node tests/run-all.mjs --themes brutal,dopamine # 只测指定主题
 node tests/unit.mjs                             # 离线单元检查（出图配置与自动切换）
 node tests/visual.mjs                           # 视觉回归：和 tests/baseline/ 逐像素对比（需要本地字体）；有意改版后加 --update
@@ -656,7 +657,7 @@ claude plugin validate .
 
 ## 路线图
 
-- [x] 长图（手机版 + 宽版）、卡片组（6 种封面、3 种整页卡）、12 套主推主题、模型自动选主题
+- [x] 长图（手机版 + 宽版）、卡片组（6 种封面、3 种整页卡）、13 套主推主题、模型自动选主题
 - [x] 封面多版本、品牌包、轻量形态（一页看完、金句图、问答卡）
 - [x] 批量流水线、发布清单、发布数据记录与报告
 - [x] 本地字体、出图服务可配置与自动切换、视觉回归测试
@@ -689,7 +690,7 @@ claude plugin validate .
   - a full Chinese translation checked block for block against the source;
   - an argument whiteboard and a comic.
 - **Publishing:** a brand kit (avatar, color, issue number), a batch queue for many links, a per-piece publish checklist with title candidates, and local publish stats with a per-platform report.
-- **Themes:** 12 main, 9 legacy.
+- **Themes:** 13 main, 9 legacy.
 - **Verification:** every output is checked automatically, and a failed check exits non-zero. A rewrite is also checked against its article (unsourced numbers, first-person headlines for someone else's article, unused pictures, coverage of the article's numbers and names).
 - **Model regression:** `tests/eval-score.mjs` and `tests/model-eval.md` compare models driving the same task. Haiku matches Opus on the rules and reaches about 88% of it in blind reviews.
 - **Requirements:** zero npm dependencies, only Node.js 22 and Chrome. Theme fonts can be mirrored locally with one explicit command; rendering itself never downloads.

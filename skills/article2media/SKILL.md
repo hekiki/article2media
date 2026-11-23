@@ -1,6 +1,6 @@
 ---
 name: article2media
-description: 把文章或视频一键做成中文视觉内容的总入口：按推荐组合把 10 个可单独使用的能力串起来——文章抓取、视频转文字、改写（总结）、全文翻译、长图、卡片（小红书 3:4 / 4:5 / 1:1 / 9:16）、公众号排版、口播视频、白板论证、漫画。常用组合：原文→改写→长图（默认）、原文→改写→小红书卡片、原文→公众号排版、原文→总结→公众号、外文→翻译→公众号、原文长图 / 原文卡片（一字不改）、视频→逐字稿→改写→长图或卡片、一稿多发（长图 + 小红书 + 公众号）、文章→口播视频。输入：X/Twitter 长文与线程、网页、微信公众号、本地 Markdown、粘贴的正文；抖音、YouTube、B 站链接、本地视频/音频、.srt/.vtt。12 套主推主题，不指定时按内容选。Use when the user gives an article, URL, long post, video link or file and wants it turned into 总结图, 长图, 知识卡片, 小红书图文, 公众号排版, 口播视频, 原文排版, 白板, 漫画 — or wants several of them, or names a combo (一键、组合、全套、一稿多发) — e.g. "把这篇文章做成图/小红书/公众号/视频", "把这个抖音视频做成小红书", "翻译成中文发公众号".
+description: 把文章或视频一键做成中文视觉内容的总入口：按推荐组合把 10 个可单独使用的能力串起来——文章抓取、视频转文字、改写（总结）、全文翻译、长图、卡片（小红书 3:4 / 4:5 / 1:1 / 9:16）、公众号排版、口播视频、白板论证、漫画。常用组合：原文→改写→长图（默认）、原文→改写→小红书卡片、原文→公众号排版、原文→总结→公众号、外文→翻译→公众号、原文长图 / 原文卡片（一字不改）、视频→逐字稿→改写→长图或卡片、一稿多发（长图 + 小红书 + 公众号）、文章→口播视频。输入：X/Twitter 长文与线程、网页、微信公众号、本地 Markdown、粘贴的正文；抖音、YouTube、B 站链接、本地视频/音频、.srt/.vtt。13 套主推主题，不指定时按内容选。Use when the user gives an article, URL, long post, video link or file and wants it turned into 总结图, 长图, 知识卡片, 小红书图文, 公众号排版, 口播视频, 原文排版, 白板, 漫画 — or wants several of them, or names a combo (一键、组合、全套、一稿多发) — e.g. "把这篇文章做成图/小红书/公众号/视频", "把这个抖音视频做成小红书", "翻译成中文发公众号".
 argument-hint: <url|视频链接|文件|粘贴的正文> [组合名] [-f 原文|-w 白板|-c 漫画] [--ratio 3:4|4:5|1:1|9:16 或 小红书/IG] [公众号] [视频] [--style 主题名|all] [--illustrate] [--verify]
 allowed-tools: Bash(node ${CLAUDE_SKILL_DIR}/engine/scripts/doctor.mjs), Bash(node ${CLAUDE_SKILL_DIR}/scripts/*), Bash(node ${CLAUDE_SKILL_DIR}/../article-fetch/scripts/*), Bash(node ${CLAUDE_SKILL_DIR}/../video-transcript/scripts/*), Bash(node ${CLAUDE_SKILL_DIR}/../article-rewrite/scripts/*), Bash(node ${CLAUDE_SKILL_DIR}/../article-translate/scripts/*), Bash(node ${CLAUDE_SKILL_DIR}/../long-image/scripts/*), Bash(node ${CLAUDE_SKILL_DIR}/../image-cards/scripts/*), Bash(node ${CLAUDE_SKILL_DIR}/../wechat-layout/scripts/*), Bash(node ${CLAUDE_SKILL_DIR}/../explainer-video/scripts/*), Bash(node ${CLAUDE_SKILL_DIR}/../logic-whiteboard/scripts/*), Bash(node ${CLAUDE_SKILL_DIR}/../article-comic/scripts/*)
 version: "2.4.0"
@@ -44,7 +44,7 @@ article2media 由 10 个能力组成，**每个都是独立的 skill**，可以�
 | **原文卡片** | 全文做成小红书卡片、原文卡片 | 取原文 →（外文先翻译）→ 卡片（原文） |
 | **视频转图文** | 这个视频做成长图 / 小红书 | 视频转文字 → 改写 → 长图或卡片 |
 | **视频转文字** | 视频转文字、逐字稿 | 视频转文字（交付 `article.md`） |
-| **X 图文** | 发 X、推特、转发配一组总结图 | 取原文 → 改写 → 长图 `--x`（同一版式切成 X 不压缩的竖条；一帖最多 20 张） |
+| **X 图文** | 发 X、推特、转发配一组总结图 | 取原文 → 改写时另写以文字为主的 X 稿 → 长图 `--x`（按内容类型写原文节选、短评、表格、要点，切成 X 不压缩、约一屏高的竖条；`--x full` 把手机版原样切条） |
 | **一稿多发** | 长图、小红书、公众号都要 | 取原文 → 改写一次 → 长图 + 卡片 + 公众号（`rewrite.md`） |
 | **文章转口播** | 做成视频、口播、视频号 | 取原文 → 口播视频 |
 | **白板 / 漫画** | 论证图、`-w`；漫画、四格、`-c` | 取原文 → 白板 / 漫画 |
@@ -58,7 +58,7 @@ article2media 由 10 个能力组成，**每个都是独立的 skill**，可以�
 
 ## 流程
 
-1. **环境检查**（本会话第一次）：`node ${CLAUDE_SKILL_DIR}/engine/scripts/doctor.mjs`。失败时把修复建议转告用户，然后停下。`local-fonts` 一行显示没装本地字体、而用户网络不稳定（出图报"字体没有加载"）时，建议他运行一次 `node ${CLAUDE_SKILL_DIR}/scripts/fonts.mjs`（约 65 MB，可加 `--mirror <主机>`）：这是下载，要用户同意再跑；之后出图不再联网加载字体。
+1. **环境检查**（本会话第一次）：`node ${CLAUDE_SKILL_DIR}/engine/scripts/doctor.mjs`。缺的是要用户自己安装的依赖时，把修复建议转告用户，然后停下；其他失败先自己排查、重试一次。`local-fonts` 一行显示没装本地字体、而用户网络不稳定（出图报"字体没有加载"）时，建议他运行一次 `node ${CLAUDE_SKILL_DIR}/scripts/fonts.mjs`（约 65 MB，可加 `--mirror <主机>`）：这是下载，要用户同意再跑；之后出图不再联网加载字体。
 2. **定组合**：不需要先跟用户确认，除非 pipeline.md 第 2 节说要问。
 3. **依次调用能力**：按 pipeline.md 第 3 节调用每个 skill，照它的 SKILL.md 做完、检查通过（✗ 全部修完），再进入下一步。所有能力用同一个工作目录。
 4. **一份改写稿多处用**：一稿多发时只改写一次；同一篇已有 `content.json` 时不要重写，只补新版式需要的字段。
@@ -81,7 +81,7 @@ node ${CLAUDE_SKILL_DIR}/scripts/batch.mjs status 本周      # 从磁盘重新�
 node ${CLAUDE_SKILL_DIR}/scripts/batch.mjs checklist 本周   # 给做完的每一条写发布清单 publish.md
 ```
 
-1. **init**：`--spec` 按用户说的定（`cards[:比例]` 总结卡片、`long` 总结长图、`x` X 长图（要发 X 时加上）、`wechat` 公众号原文排版、`wechat-rewrite` 公众号总结、`full` 原文长图、`full-cards` 原文卡片、`video`、`whiteboard`、`comic`；没说就是 `long`）。已抓过的链接自动跳过（`--refetch` 重抓），视频链接记为"待转写"，不会让整批失败。用户说了自己打算几点发，才写 `--schedule "xhs=周二 20:00"`；不要替用户编发布时间。
+1. **init**：`--spec` 按用户说的定（`cards[:比例]` 总结卡片、`long` 总结长图、`x` X 版（要发 X 时加上，先写 X 稿）、`x-full` X 完整版、`wechat` 公众号原文排版、`wechat-rewrite` 公众号总结、`full` 原文长图、`full-cards` 原文卡片、`video`、`whiteboard`、`comic`；没说就是 `long`）。已抓过的链接自动跳过（`--refetch` 重抓），视频链接记为"待转写"，不会让整批失败。用户说了自己打算几点发，才写 `--schedule "xhs=周二 20:00"`；不要替用户编发布时间。
 2. **循环**：运行 `next` → 照它说的做这一步（改写用 `article-rewrite`，出图用对应能力，检查的 ✗ 修完）→ 再运行 `next`。**一次只做一条内容**，做完一条再做下一条；主题没固定时每篇各自按 styles.md 选。
 3. **停下来问用户，不要自己决定**：`next` 末尾列出的"等用户确认"的条目——抓取失败（换链接、粘贴正文，或 `skip`）、正文偏短或疑似付费墙（看一眼 `article.md`，确认内容完整才 `confirm`，否则请用户粘贴正文）。其余条目照常做完，最后一起问，不要让一条坏链接卡住整批。
 4. **收尾**：`next` 显示"能做的都做完了"后运行 `checklist`，再运行 `status`，把看板（`article2media-out/batches/<批次>/queue.md`）的表格贴给用户：每条的产物路径、失败和跳过的原因、发布清单里的 ✗ / ⚠。
